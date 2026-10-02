@@ -165,14 +165,14 @@ async function uiFlow(browser, errs) {
   const tap = async (sel) => { await page.locator(sel).first().click({ timeout: 8000 }); await page.waitForTimeout(250); };
   let s;
 
-  // 爆破入口已开放测试场；沙漠灰未核定，设置页必须明确测试场名称。
+  // 默认爆破入口进入已交付的原创沙城。
   const bomb = page.locator('#home [data-act="bomb"]');
   const bombOff = await bomb.getAttribute('class');
   const bombAria = await bomb.getAttribute('aria-disabled');
   await bomb.click({ timeout: 5000 });
   await page.waitForTimeout(250);
   const bombSetup = await page.evaluate(() => ({ mode: window.__game.selectedMode, title: document.getElementById('setupTitle').textContent, menu: !document.getElementById('menu').classList.contains('hidden') }));
-  check('主页：爆破入口进入明确标注的测试场设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '爆破测试场', JSON.stringify(bombSetup));
+  check('主页：爆破入口进入沙城设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '沙城', JSON.stringify(bombSetup));
   await page.locator('#btnMenuBack').click();
 
   await tap('#home [data-act="team"]');

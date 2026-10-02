@@ -70,7 +70,7 @@ async function start(page, mode = 'bomb', size = 6, freeze = true, primary = 'ak
     window.__hudBotsSample = null;
     g.quitToMenu(); g.opts.team = team; g.opts.size = size; g.opts.diff = 'normal';
     g.profile.selectBackpack('bag-1'); g.profile.equip('bag-1', 'primary', primary);
-    if (mode === 'bomb') g.startBombMatch(); else g.startTeamMatch();
+    if (mode === 'bomb') g.startBombMatch({ mapId: 'bomb-test' }); else g.startTeamMatch();
     if (freeze) window.__hudBotsFreeze();
     g.updateHUD(0);
   }, { mode, size, freeze, primary, team });

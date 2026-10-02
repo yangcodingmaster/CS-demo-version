@@ -37,17 +37,17 @@ export function gunMaterials() {
   const w = wearTextures();
   const mk = (color, rough, metal, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, roughnessMap: w.rough, normalMap: w.nrm, normalScale: new THREE.Vector2(0.3, 0.3), ...extra });
   M = {
-    metal: mk(0x2b2d30, 0.42, 0.85),
-    black: mk(0x16171a, 0.6, 0.35),
-    steel: mk(0x8e939a, 0.28, 0.95),
-    wood: new THREE.MeshStandardMaterial({ map: w.wood, roughness: 0.55, metalness: 0.05, normalMap: w.nrm, normalScale: new THREE.Vector2(0.4, 0.4) }),
+    metal: mk(0x363a3f, 0.68, 0.65),
+    black: mk(0x202328, 0.78, 0.08),
+    steel: mk(0xabb1b5, 0.4, 0.78),
+    wood: new THREE.MeshStandardMaterial({ map: w.wood, color: 0xe0c5aa, roughness: 0.66, metalness: 0.02, normalMap: w.nrm, normalScale: new THREE.Vector2(0.24, 0.24) }),
     bakelite: mk(0x6a2e14, 0.45, 0.1),
-    olive: mk(0x4d5638, 0.62, 0.2),
+    olive: mk(0x586045, 0.76, 0.06),
     tan: mk(0x8f7a55, 0.6, 0.15),
-    rubber: mk(0x121212, 0.85, 0.0),
+    rubber: mk(0x191b1c, 0.9, 0.0),
     brass: mk(0xc8a04a, 0.3, 1.0),
     glass: new THREE.MeshStandardMaterial({ color: 0x0a1a24, roughness: 0.05, metalness: 0.9, emissive: 0x051018 }),
-    blade: mk(0xc9ced4, 0.18, 1.0),
+    blade: mk(0xb9c2c8, 0.29, 0.94),
     red: mk(0x8a1a14, 0.5, 0.2),
   };
   return M;
@@ -69,364 +69,441 @@ const CX = (r, len, seg = 10) => { const g = new THREE.CylinderGeometry(r, r, le
 const CY = (r, len, seg = 10) => new THREE.CylinderGeometry(r, r, len, seg);
 function anchor(g, name, x, y, z) { const o = new THREE.Object3D(); o.name = name; o.position.set(x, y, z); g.add(o); return o; }
 
-function curvedMag(g, mat, segs, x0, y0, z0, w, segH, segD, curve) {
+// 从侧面轮廓挤出薄实体。倒角只用一段，避免用多块圆角盒拼出斜面。
+// points 为 [z, y]；UV 按实际轮廓归一化，木纹不会缩成一条颜色带。
+function profile(width, points, bevel = 0.002, holes = []) {
+  const path = (outline, Path) => {
+    const s = new Path();
+    outline.forEach(([z, y], i) => i ? s.lineTo(-z, y) : s.moveTo(-z, y));
+    s.closePath();
+    return s;
+  };
+  const shape = path(points, THREE.Shape);
+  shape.holes = holes.map((outline) => path(outline, THREE.Path));
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: width - bevel * 2,
+    bevelEnabled: bevel > 0,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 1,
+    curveSegments: 1,
+    steps: 1,
+  });
+  geo.translate(0, 0, -width / 2 + bevel);
+  geo.rotateY(Math.PI / 2);
+  geo.computeBoundingBox();
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+  const b = geo.boundingBox, dz = b.max.z - b.min.z, dy = b.max.y - b.min.y;
+  for (let i = 0; i < p.count; i++) {
+    const u = (p.getZ(i) - b.min.z) / dz;
+    const v = Math.abs(n.getX(i)) > 0.5 ? (p.getY(i) - b.min.y) / dy : (p.getX(i) - b.min.x) / width;
+    uv.setXY(i, u, v);
+  }
+  return geo;
+}
+
+function guard(g, mat, front, rear, top, bottom, width = 0.014) {
+  const points = [[rear, top], [front + 0.009, top], [front, top - 0.012], [front + 0.005, bottom + 0.009], [front + 0.016, bottom], [rear - 0.007, bottom], [rear, bottom + 0.014]];
+  const hole = [[rear - 0.008, top - 0.007], [front + 0.015, top - 0.007], [front + 0.01, bottom + 0.012], [rear - 0.009, bottom + 0.01]];
+  part(g, profile(width, points, 0.0008, [hole]), mat, 0, 0, 0);
+}
+
+function serrations(g, mat, halfWidth, y, startZ, count, spacing, height) {
+  for (const x of [-halfWidth, halfWidth]) for (let i = 0; i < count; i++) {
+    part(g, BX(0.0015, height, 0.0024), mat, x, y, startZ + i * spacing, -0.14);
+  }
+}
+
+function curvedMag(g, mat, segs, x0, y0, z0, w, segH, segD, curve, channelMat) {
   const mag = new THREE.Group(); mag.name = 'mag';
   mag.position.set(x0, y0, z0);
-  let y = 0, z = 0, a = 0;
+  const centers = [{ y: 0, z: 0, a: 0 }];
+  let y = 0, z = 0;
   for (let i = 0; i < segs; i++) {
-    const m = part(mag, RB(w, segH + 0.004, segD, 0.003), mat, 0, y - segH / 2, z);
-    m.rotation.x = -a;
+    const a = (i + 0.5) * curve;
     y -= Math.cos(a) * segH; z -= Math.sin(a) * segH;
-    a += curve;
+    centers.push({ y, z, a: (i + 1) * curve });
   }
-  part(mag, RB1(w + 0.005, 0.013, segD + 0.008, 0.003), mat, 0, y - 0.004, z, -a + curve);
+  const edge = (offset) => centers.map((c) => [c.z + Math.cos(c.a) * offset, c.y - Math.sin(c.a) * offset]);
+  part(mag, profile(w, [...edge(-segD / 2), ...edge(segD / 2).reverse()], 0.002), mat, 0, 0, 0);
+  // 两条浅冲压槽跟随同一弧线，轮廓和底板只属于可拆卸 mag 组。
+  if (channelMat) for (const x of [-w / 2, w / 2]) for (const offset of [-segD * 0.22, segD * 0.22]) {
+    const left = edge(offset - 0.0015).slice(1), right = edge(offset + 0.0015).slice(1).reverse();
+    part(mag, profile(0.0012, [...left, ...right], 0), channelMat, x, 0.007, 0);
+  }
+  const a = segs * curve;
+  part(mag, RB1(w + 0.005, 0.011, segD + 0.007, 0.003), mat, 0, y - Math.cos(a) * 0.003, z - Math.sin(a) * 0.003, a);
+  const hold = centers[Math.max(1, Math.floor(segs * 0.65))];
+  anchor(mag, 'reloadGrip', 0, hold.y, hold.z);
   g.add(mag);
   return mag;
+}
+
+function bladeFacet(upper) {
+  const sections = [
+    { z: -0.035, top: 0.016, ridge: 0.005, bottom: -0.014, t: 0.0024 },
+    { z: -0.16, top: 0.014, ridge: 0.004, bottom: -0.012, t: 0.002 },
+    { z: -0.205, top: 0.014, ridge: 0.006, bottom: -0.006, t: 0.0012 },
+    { z: -0.235, top: 0.003, ridge: 0.003, bottom: 0.003, t: 0 },
+  ];
+  const verts = [], uvs = [];
+  const point = (s, side, ridge) => [ridge ? s.t * side : 0, ridge ? s.ridge : upper ? s.top : s.bottom, s.z];
+  const triangle = (a, b, c) => { verts.push(...a, ...b, ...c); for (const p of [a, b, c]) uvs.push((-p[2] - 0.035) / 0.2, (p[1] + 0.014) / 0.03); };
+  for (let i = 1; i < sections.length; i++) for (const side of [-1, 1]) {
+    const a = point(sections[i - 1], side, true), b = point(sections[i], side, true);
+    const c = point(sections[i], side, false), d = point(sections[i - 1], side, false);
+    const flip = upper ? side < 0 : side > 0;
+    if (i < sections.length - 1) flip ? triangle(a, c, b) : triangle(a, b, c);
+    flip ? triangle(a, d, c) : triangle(a, c, d);
+  }
+  const s = sections[0];
+  if (upper) triangle(point(s, -1, true), point(s, 1, true), point(s, 1, false));
+  else triangle(point(s, 1, true), point(s, -1, true), point(s, 1, false));
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  return geo;
 }
 
 const builders = {
   ak47(m) {
     const g = new THREE.Group();
-    // 机匣：主体保留圆角，侧面加冲压加强筋（裸钢少量高光）
-    part(g, RB(0.046, 0.056, 0.25, 0.006), m.metal, 0, 0.035, -0.05);
-    part(g, RB1(0.0445, 0.03, 0.215, 0.006), m.metal, 0, 0.068, -0.028); // 机匣盖压在机匣上，避免共面
-    part(g, CY(0.011, 0.026, 12), m.metal, 0, 0.076, 0.075);            // 机匣盖后端卷边
-    part(g, BX(0.016, 0.01, 0.055), m.steel, -0.0245, 0.05, -0.025);     // 枪机框（拉机柄槽内）
-    for (const x of [-0.0225, 0.0225]) part(g, BX(0.002, 0.012, 0.19), m.steel, x, 0.038, -0.05);
-    // 护木：下护木 + 金属卡箍 + 上护木散热槽，接口不再是两块木头直接对叠
-    part(g, RB1(0.05, 0.044, 0.19, 0.008), m.wood, 0, 0.02, -0.275);
-    part(g, RB1(0.032, 0.05, 0.03, 0.006), m.metal, 0, 0.032, -0.183);
-    part(g, CZ(0.019, 0.175), m.wood, 0, 0.066, -0.28);
-    part(g, BX(0.02, 0.005, 0.024), m.metal, 0, 0.09, -0.225); // 上护木散热槽
-    // 枪管 + 导气箍
-    part(g, CZ(0.0085, 0.3), m.metal, 0, 0.042, -0.47);
-    part(g, CZ(0.006, 0.26), m.metal, 0, 0.066, -0.43);
-    part(g, RB1(0.022, 0.034, 0.026, 0.005), m.metal, 0, 0.06, -0.383);
-    // 准星座：护耳围住细准星柱
-    part(g, RB1(0.024, 0.03, 0.026, 0.005), m.metal, 0, 0.056, -0.552);
-    for (const x of [-0.011, 0.011]) part(g, BX(0.006, 0.022, 0.008), m.metal, x, 0.078, -0.552, 0, 0, x < 0 ? 0.18 : -0.18);
-    part(g, BX(0.004, 0.02, 0.004), m.steel, 0, 0.088, -0.552);
-    // 枪口：斜切制退器 + 前端收口
-    const brake = part(g, CZ(0.0125, 0.056, 12), m.metal, 0, 0.042, -0.612);
-    brake.rotation.x = -0.1;
-    part(g, CZ(0.0095, 0.014, 12), m.black, 0, 0.043, -0.641);
-    // 弹匣井：把机匣底面、弹匣口与扳机护圈接成一体
-    part(g, RB1(0.038, 0.048, 0.095, 0.006), m.metal, 0, -0.008, -0.11);
-    // 扳机护圈 / 扳机 / 弹匣卡笋（收在机匣下方，不再悬空）
-    part(g, BX(0.028, 0.008, 0.05), m.metal, 0, -0.021, -0.318);
-    part(g, BX(0.026, 0.006, 0.012), m.metal, 0, -0.024, -0.345);       // 护圈底板
-    part(g, BX(0.006, 0.022, 0.03), m.metal, 0, -0.034, -0.35);
-    part(g, BX(0.008, 0.016, 0.026), m.metal, 0, -0.016, -0.3);
-    part(g, BX(0.008, 0.026, 0.008), m.steel, 0, -0.034, -0.032);
-    // 弹匣：带底板与加强筋
-    curvedMag(g, m.bakelite, 5, 0, 0.005, -0.102, 0.03, 0.045, 0.07, 0.11);
-    part(g, BX(0.028, 0.008, 0.062), m.metal, 0, -0.033, -0.21);
-    part(g, BX(0.032, 0.004, 0.006), m.bakelite, 0, -0.06, -0.21); // 弹匣加强筋
-    // 握把 + 木托（托底加钢板、托颈过渡、背带环）
-    part(g, RB1(0.03, 0.1, 0.042, 0.008), m.bakelite, 0, -0.045, 0.035, 0.32);
-    const st = part(g, RB1(0.042, 0.068, 0.27, 0.012), m.wood, 0, 0.004, 0.2, -0.1);
-    part(st, BX(0.044, 0.1, 0.012), m.metal, 0, -0.012, 0.135);
-    part(g, BX(0.04, 0.056, 0.014), m.metal, 0, 0.049, 0.337);
-    part(g, BX(0.024, 0.01, 0.012), m.steel, 0, -0.038, 0.2);
-    const bolt = part(g, CX(0.006, 0.03), m.steel, 0.034, 0.06, -0.08, 0, 0, 0, 'bolt');
-    void bolt;
-    anchor(g, 'grip', 0, -0.035, 0.03);
-    anchor(g, 'fore', 0, 0.0, -0.29);
-    anchor(g, 'muzzle', 0, 0.042, -0.66);
-    anchor(g, 'eject', 0.03, 0.068, -0.04);
-    anchor(g, 'magwell', 0, -0.02, -0.12);
+    // 冲压机匣与拱形上盖；加强筋使用涂层而不是两条醒目的银色贴片。
+    part(g, profile(0.046, [[-0.175,0.015],[-0.168,0.061],[0.061,0.061],[0.075,0.046],[0.071,0.006],[-0.133,0.003]],0.003), m.metal, 0,0,0);
+    part(g, CZ(0.022,0.214,14), m.metal, 0,0.058,-0.031);
+    part(g, RB1(0.042,0.022,0.204,0.005), m.metal, 0,0.071,-0.031);
+    for (const x of [-0.0235,0.0235]) part(g, BX(0.0015,0.007,0.15), m.black, x,0.025,-0.053);
+    part(g, RB1(0.0025,0.015,0.066,0.003), m.black, 0.024,0.053,-0.052);
+    part(g, BX(0.0025,0.004,0.083), m.metal, 0.025,0.024,0.008,0.13);
+    for (const z of [-0.131,0.03]) part(g, CX(0.0028,0.049,8), m.steel, 0,0.019,z);
+    // 木护木收口、暖棕木托和黑色卡箍形成连续轮廓。
+    part(g, profile(0.05,[[-0.181,0.031],[-0.205,0.043],[-0.344,0.04],[-0.37,0.025],[-0.361,0.001],[-0.204,-0.003],[-0.181,0.009]],0.004),m.wood,0,0,0);
+    part(g, CZ(0.0175,0.163,14,0.016), m.wood, 0,0.065,-0.278);
+    for (const z of [-0.182,-0.367]) part(g, CZ(0.024,0.013,12),m.metal,0,0.039,z);
+    for (const x of [-0.025,0.025]) for (const z of [-0.24,-0.275,-0.31]) part(g,BX(0.0015,0.008,0.018),m.bakelite,x,0.031,z);
+    part(g,CZ(0.0085,0.30,14),m.metal,0,0.042,-0.47);
+    part(g,CZ(0.006,0.26,12),m.metal,0,0.066,-0.43);
+    part(g,profile(0.023,[[-0.397,0.04],[-0.397,0.067],[-0.38,0.083],[-0.37,0.069],[-0.37,0.04]],0.002),m.metal,0,0,0);
+    part(g,profile(0.024,[[-0.568,0.039],[-0.565,0.067],[-0.557,0.08],[-0.545,0.08],[-0.54,0.061],[-0.539,0.039]],0.002),m.metal,0,0,0);
+    for (const x of [-0.01,0.01]) part(g,BX(0.0035,0.023,0.008),m.metal,x,0.083,-0.552,0,0,x<0?0.2:-0.2);
+    part(g,BX(0.0035,0.02,0.004),m.steel,0,0.088,-0.552);
+    part(g,profile(0.025,[[-0.193,0.04],[-0.191,0.074],[-0.18,0.088],[-0.15,0.083],[-0.147,0.059],[-0.163,0.041]],0.002),m.metal,0,0,0);
+    part(g,RB1(0.018,0.007,0.04,0.002),m.metal,0,0.091,-0.175);
+    part(g,CZ(0.012,0.06,12),m.metal,0,0.042,-0.615);
+    part(g,CZ(0.0085,0.006,12),m.black,0,0.042,-0.648);
+    // 护圈回到弹匣与握把之间，卡笋连接机匣下缘。
+    part(g,RB1(0.036,0.034,0.081,0.005),m.metal,0,-0.009,-0.109);
+    guard(g,m.metal,-0.064,0.006,0.008,-0.051,0.014);
+    part(g,profile(0.008,[[-0.033,-0.008],[-0.023,-0.015],[-0.022,-0.035],[-0.03,-0.042],[-0.037,-0.039],[-0.031,-0.031]],0.001),m.steel,0,0,0);
+    part(g,RB1(0.018,0.027,0.009,0.002),m.metal,0,-0.038,-0.073,0.25);
+    curvedMag(g,m.bakelite,5,0,0.005,-0.102,0.03,0.045,0.07,0.11,m.black);
+    part(g,profile(0.03,[[0.015,0.005],[0.045,0.004],[0.067,-0.088],[0.04,-0.099],[0.025,-0.089],[0.009,-0.013]],0.004),m.bakelite,0,0,0);
+    part(g,profile(0.044,[[0.069,0.039],[0.119,0.037],[0.183,0.036],[0.322,0.052],[0.335,0.035],[0.335,-0.05],[0.311,-0.059],[0.157,-0.028],[0.102,-0.009],[0.069,0.013]],0.004),m.wood,0,0,0);
+    part(g,profile(0.046,[[0.331,0.051],[0.343,0.049],[0.343,-0.052],[0.331,-0.055]],0.002),m.metal,0,0,0);
+    part(g,CX(0.004,0.049,8),m.steel,0,0.003,0.303);
+    part(g,RB1(0.026,0.01,0.013,0.003),m.metal,0,-0.036,0.199);
+    part(g,CX(0.006,0.03),m.steel,0.034,0.06,-0.08,0,0,0,'bolt');
+    anchor(g,'grip',0,-0.035,0.03);
+    anchor(g,'fore',0,0,-0.29);
+    anchor(g,'muzzle',0,0.042,-0.66);
+    anchor(g,'eject',0.03,0.068,-0.04);
+    anchor(g,'magwell',0,-0.02,-0.12);
     return g;
   },
   m4a1(m) {
     const g = new THREE.Group();
-    // 上下机匣分层：下机匣聚合物、上机匣涂层金属 + 顶部导轨
-    part(g, RB(0.042, 0.046, 0.23, 0.005), m.black, 0, 0.05, -0.04);
-    part(g, RB1(0.036, 0.022, 0.2, 0.004), m.metal, 0, 0.078, -0.05);
-    for (let i = 0; i < 11; i++) part(g, BX(0.026, 0.005, 0.008), m.metal, 0, 0.092, -0.15 + i * 0.02);
-    part(g, RB1(0.03, 0.03, 0.042, 0.005), m.black, 0, 0.1, 0.025);    // 后照门座
-    part(g, BX(0.004, 0.014, 0.004), m.steel, 0, 0.118, 0.03);
-    part(g, BX(0.004, 0.01, 0.03), m.steel, 0.018, 0.082, -0.04);       // 辅助推机柄
-    part(g, RB1(0.008, 0.026, 0.05, 0.003), m.black, 0.017, 0.05, -0.03); // 抛壳窗盖
-    part(g, RB1(0.036, 0.05, 0.17, 0.006), m.black, 0, 0.005, -0.02);
-    part(g, RB1(0.036, 0.05, 0.06, 0.006), m.black, 0, -0.03, -0.11);
-    part(g, BX(0.026, 0.03, 0.07), m.black, 0, -0.03, -0.06);            // 弹匣井，衔接下机匣与弹匣
-    for (const x of [-0.02, 0.02]) part(g, BX(0.002, 0.014, 0.028), m.metal, x, -0.012, 0.035);
-    // 护木：圆筒 + 前后固定环 + 散热孔
-    part(g, CZ(0.0255, 0.21, 14), m.black, 0, 0.046, -0.28);
-    for (const z of [-0.196, -0.364]) part(g, CY(0.0268, 0.016, 14), m.metal, 0, 0.046, z);
-    for (let i = 0; i < 4; i++) part(g, CZ(0.0262, 0.005, 12), m.metal, 0, 0.046, -0.215 - i * 0.038);
-    // 枪管 + 消焰器（侧面开槽）
-    part(g, CZ(0.0115, 0.19, 14, 0.0095), m.metal, 0, 0.046, -0.468);    // 前段枪管向枪口收细
-    part(g, CZ(0.0155, 0.055, 12), m.metal, 0, 0.046, -0.601);
-    for (const z of [-0.59, -0.612]) part(g, BX(0.028, 0.007, 0.007), m.black, 0, 0.046, z);
-    // 三角准星座 + 护耳 + 准星柱 + 前背带环
-    part(g, RB1(0.018, 0.052, 0.02, 0.005), m.black, 0, 0.068, -0.41);
-    for (const x of [-0.011, 0.011]) part(g, BX(0.006, 0.028, 0.008), m.black, x, 0.09, -0.41, 0, 0, x < 0 ? 0.18 : -0.18);
-    part(g, BX(0.004, 0.02, 0.004), m.steel, 0, 0.105, -0.41);
-    part(g, BX(0.03, 0.014, 0.03), m.black, 0, 0.02, -0.395);
-    part(g, BX(0.022, 0.014, 0.026), m.metal, 0, -0.012, -0.36);
-    // 弹匣 + 底板
-    curvedMag(g, m.metal, 4, 0, -0.04, -0.085, 0.028, 0.045, 0.062, 0.06);
-    part(g, BX(0.032, 0.01, 0.07), m.metal, 0, -0.097, -0.204);
-    // 握把：聚合物 + 橡胶底托
-    part(g, RB1(0.028, 0.09, 0.036, 0.008), m.black, 0, -0.04, 0.035, 0.38);
-    part(g, RB1(0.03, 0.014, 0.038, 0.005), m.rubber, 0, -0.082, 0.053, 0.38);
-    // 伸缩托：缓冲管 + 托体 + 橡胶托底板
-    part(g, CZ(0.016, 0.17), m.black, 0, 0.046, 0.145);
-    part(g, RB1(0.042, 0.07, 0.1, 0.01), m.black, 0, 0.032, 0.235);
-    part(g, RB1(0.044, 0.018, 0.014, 0.004), m.rubber, 0, 0.028, 0.292);
-    part(g, BX(0.03, 0.01, 0.02), m.black, 0, 0.078, 0.07, 0, 0, 0, 'bolt');
-    part(g, BX(0.002, 0.03, 0.05), m.metal, 0.022, 0.05, -0.04);
-    anchor(g, 'grip', 0, -0.035, 0.035);
-    anchor(g, 'fore', 0, 0.02, -0.28);
-    anchor(g, 'muzzle', 0, 0.046, -0.63);
-    anchor(g, 'eject', 0.026, 0.055, -0.03);
-    anchor(g, 'magwell', 0, -0.06, -0.085);
+    part(g,profile(0.042,[[-0.157,0.029],[-0.151,0.069],[-0.126,0.075],[0.057,0.075],[0.077,0.062],[0.074,0.023],[-0.115,0.02]],0.003),m.metal,0,0,0);
+    part(g,profile(0.037,[[-0.139,0.031],[-0.087,0.027],[-0.081,-0.045],[-0.031,-0.043],[-0.021,-0.01],[0.062,-0.009],[0.063,0.027]],0.003),m.black,0,0,0);
+    part(g,RB1(0.026,0.011,0.214,0.002),m.metal,0,0.081,-0.038);
+    for(let i=0;i<11;i++) part(g,BX(0.03,0.005,0.008),m.metal,0,0.089,-0.14+i*0.019);
+    // 抛壳窗、推机柄和后照门在机匣表面，不撑成额外方块。
+    part(g,profile(0.003,[[-0.066,0.065],[-0.018,0.065],[-0.013,0.041],[-0.063,0.041]],0.0005),m.black,0.022,0,0);
+    part(g,CX(0.0065,0.009,10),m.metal,0.026,0.06,0.015,0.45);
+    part(g,RB1(0.03,0.022,0.031,0.003),m.black,0,0.099,0.025);
+    for(const x of [-0.011,0.011]) part(g,BX(0.005,0.017,0.008),m.black,x,0.117,0.025);
+    part(g,CZ(0.0245,0.211,16),m.black,0,0.046,-0.28);
+    part(g,CZ(0.025,0.032,14),m.metal,0,0.046,-0.166);
+    // 轴向固定环与窄导轨；宽面护木保持圆筒轮廓。
+    for(const z of [-0.183,-0.378]) part(g,CZ(0.027,0.013,16),m.metal,0,0.046,z);
+    part(g,RB1(0.029,0.008,0.174,0.003),m.metal,0,0.073,-0.281);
+    for(let i=0;i<7;i++) part(g,BX(0.032,0.004,0.007),m.metal,0,0.079,-0.353+i*0.024);
+    for(const x of [-0.0246,0.0246]) for(let i=0;i<5;i++) part(g,RB1(0.002,0.009,0.018,0.001),m.metal,x,0.045,-0.347+i*0.032);
+    part(g,CZ(0.0115,0.205,14,0.0095),m.metal,0,0.046,-0.473);
+    part(g,CZ(0.0155,0.056,12),m.metal,0,0.046,-0.599);
+    for(const x of [-0.014,0.014]) for(const z of [-0.593,-0.611]) part(g,BX(0.002,0.012,0.01),m.black,x,0.046,z);
+    part(g,CZ(0.01,0.004,12),m.black,0,0.046,-0.626);
+    part(g,profile(0.018,[[-0.433,0.025],[-0.424,0.073],[-0.416,0.091],[-0.409,0.091],[-0.393,0.025]],0.002,[[[-0.42,0.04],[-0.413,0.069],[-0.404,0.04]]]),m.metal,0,0,0);
+    for(const x of [-0.009,0.009]) part(g,BX(0.0035,0.022,0.008),m.metal,x,0.099,-0.413,0,0,x<0?0.16:-0.16);
+    part(g,BX(0.0035,0.022,0.004),m.steel,0,0.104,-0.413);
+    guard(g,m.black,-0.025,0.031,-0.003,-0.046,0.016);
+    part(g,RB1(0.007,0.026,0.007,0.002),m.steel,0,-0.022,0.002,0.22);
+    curvedMag(g,m.metal,4,0,-0.04,-0.085,0.028,0.045,0.062,0.06,m.black);
+    part(g,profile(0.028,[[0.017,0.003],[0.044,0.002],[0.074,-0.079],[0.055,-0.096],[0.031,-0.09],[0.009,-0.016]],0.004),m.black,0,0,0);
+    part(g,RB1(0.031,0.013,0.035,0.004),m.rubber,0,-0.086,0.053,0.38);
+    part(g,CZ(0.0155,0.19,14),m.metal,0,0.046,0.143);
+    part(g,profile(0.043,[[0.145,0.033],[0.196,0.066],[0.275,0.069],[0.296,0.054],[0.297,-0.035],[0.275,-0.04],[0.257,-0.012],[0.185,-0.009]],0.004),m.black,0,0,0);
+    part(g,RB1(0.046,0.102,0.014,0.004),m.rubber,0,0.016,0.301);
+    part(g,RB1(0.015,0.011,0.047,0.002),m.metal,0,-0.019,0.207);
+    part(g,BX(0.03,0.01,0.02),m.black,0,0.078,0.07,0,0,0,'bolt');
+    anchor(g,'grip',0,-0.035,0.035);
+    anchor(g,'fore',0,0.02,-0.28);
+    anchor(g,'muzzle',0,0.046,-0.63);
+    anchor(g,'eject',0.026,0.055,-0.03);
+    anchor(g,'magwell',0,-0.06,-0.085);
     return g;
   },
   awm(m) {
     const g = new THREE.Group();
-    // 枪身与护木
-    part(g, RB(0.055, 0.075, 0.46, 0.012), m.olive, 0, 0.004, -0.02);
-    part(g, RB1(0.05, 0.05, 0.22, 0.012), m.olive, 0, -0.005, -0.33);
-    part(g, CY(0.0235, 0.02, 14), m.olive, 0, 0.05, -0.435);
-    // 枪管：阶梯锥形 + 带挡板的枪口制退器
-    part(g, CZ(0.024, 0.22), m.metal, 0, 0.05, -0.07);
-    part(g, CZ(0.0185, 0.36, 12), m.metal, 0, 0.05, -0.35);              // 中段枪管
-    part(g, CZ(0.0155, 0.2, 12, 0.0145), m.metal, 0, 0.05, -0.63);       // 前段收细
-    part(g, CZ(0.017, 0.02, 12), m.steel, 0, 0.05, -0.737);              // 阶梯肩
-    part(g, CZ(0.019, 0.068, 12), m.metal, 0, 0.05, -0.778);             // 制退器
-    for (const z of [-0.757, -0.783]) part(g, BX(0.042, 0.009, 0.009), m.black, 0, 0.05, z);
-    part(g, CZ(0.014, 0.014, 12), m.black, 0, 0.05, -0.818);
-    // 瞄准镜：镜筒 + 物镜/目镜 + 双镜座环 + 塔轮
-    part(g, CZ(0.018, 0.3), m.black, 0, 0.118, -0.07);
-    part(g, CZ(0.03, 0.09, 16, 0.019), m.black, 0, 0.118, -0.25);
-    part(g, CZ(0.025, 0.06, 16), m.black, 0, 0.118, 0.1);
-    part(g, CZ(0.027, 0.002, 16), m.glass, 0, 0.118, -0.296);
-    for (const z of [-0.155, 0.015]) part(g, CY(0.0215, 0.018, 14), m.black, 0, 0.118, z);
-    for (const z of [-0.14, 0.0]) part(g, RB1(0.032, 0.042, 0.024, 0.005), m.metal, 0, 0.09, z);
-    part(g, BX(0.03, 0.014, 0.17), m.metal, 0, 0.086, -0.07);           // 镜座底板
-    part(g, BX(0.024, 0.012, 0.012), m.steel, 0, -0.088, 0.2);          // 背带环
-    part(g, CY(0.014, 0.026, 12), m.black, 0, 0.147, -0.07);
-    part(g, CX(0.013, 0.026, 12), m.black, 0.028, 0.118, -0.07);
-    part(g, CX(0.009, 0.016, 10), m.steel, 0.042, 0.118, -0.07);
-    // 枪栓
-    const bolt = new THREE.Group(); bolt.name = 'bolt'; bolt.position.set(0.024, 0.05, 0.02);
-    part(bolt, CX(0.005, 0.045), m.steel, 0.02, 0, 0);
-    part(bolt, new THREE.SphereGeometry(0.011, 10, 8), m.black, 0.045, -0.006, 0);
+    // 连续橄榄绿托体及真实镂空的拇指孔，前托到枪托不再是一串方盒。
+    part(g,profile(0.055,[[-0.442,0.015],[-0.432,0.032],[-0.225,0.033],[-0.162,0.041],[0.133,0.04],[0.182,0.055],[0.29,0.059],[0.315,0.037],[0.315,-0.099],[0.277,-0.104],[0.238,-0.078],[0.136,-0.043],[0.102,-0.022],[0.097,-0.113],[0.06,-0.113],[0.042,-0.031],[-0.166,-0.032],[-0.43,-0.033]],0.004,[[[0.12,0.019],[0.23,0.016],[0.229,-0.047],[0.153,-0.028],[0.117,-0.016]]]),m.olive,0,0,0);
+    part(g,profile(0.05,[[0.157,0.046],[0.29,0.048],[0.298,0.074],[0.174,0.079],[0.157,0.069]],0.003),m.olive,0,0,0);
+    part(g,RB1(0.057,0.167,0.017,0.004),m.rubber,0,-0.018,0.328);
+    for(const z of [-0.28,-0.355]) part(g,BX(0.058,0.009,0.03),m.black,0,-0.025,z);
+    part(g,CZ(0.024,0.22,16),m.metal,0,0.05,-0.07);
+    part(g,CZ(0.0185,0.36,14),m.metal,0,0.05,-0.35);
+    part(g,CZ(0.0155,0.2,14,0.0145),m.metal,0,0.05,-0.63);
+    part(g,CZ(0.017,0.02,12),m.steel,0,0.05,-0.737);
+    part(g,profile(0.04,[[-0.819,0.03],[-0.819,0.07],[-0.751,0.07],[-0.747,0.06],[-0.747,0.04],[-0.751,0.03]],0.003),m.metal,0,0,0);
+    for(const x of [-0.019,0.019]) for(const z of [-0.762,-0.789]) part(g,BX(0.0018,0.016,0.011),m.black,x,0.05,z);
+    part(g,CZ(0.012,0.006,12),m.black,0,0.05,-0.826);
+    // 镜筒、渐扩物镜、目镜调焦环与环形镜座按同一轴线连接。
+    part(g,CZ(0.0175,0.30,16),m.black,0,0.118,-0.07);
+    part(g,CZ(0.031,0.09,16,0.0185),m.black,0,0.118,-0.25);
+    part(g,CZ(0.025,0.06,16,0.018),m.black,0,0.118,0.1);
+    part(g,CZ(0.027,0.002,16),m.glass,0,0.118,-0.296);
+    part(g,CZ(0.021,0.002,16),m.glass,0,0.118,0.132);
+    for(const z of [-0.155,0.015]) {
+      part(g,new THREE.TorusGeometry(0.0195,0.003,4,14),m.metal,0,0.118,z);
+      part(g,RB1(0.028,0.028,0.022,0.003),m.metal,0,0.085,z);
+    }
+    for(const z of [-0.284,-0.273,0.11,0.122]) part(g,new THREE.TorusGeometry(z<0?0.029:0.0225,0.0018,4,14),m.metal,0,0.118,z);
+    part(g,RB1(0.03,0.01,0.195,0.002),m.metal,0,0.072,-0.068);
+    part(g,CY(0.014,0.026,12),m.metal,0,0.148,-0.07);
+    part(g,CX(0.013,0.026,12),m.metal,0.026,0.118,-0.07);
+    part(g,CX(0.01,0.005,12),m.black,0.041,0.118,-0.07);
+    const bolt=new THREE.Group();bolt.name='bolt';bolt.position.set(0.024,0.05,0.02);
+    part(bolt,CX(0.0045,0.045,10),m.steel,0.02,0,0);
+    part(bolt,new THREE.SphereGeometry(0.011,10,8),m.black,0.045,-0.006,0,0,0,0,'boltHandle');
+    anchor(bolt,'boltGrip',0.045,-0.006,0);
     g.add(bolt);
-    // 弹匣（带外伸底板）
-    const mag = new THREE.Group(); mag.name = 'mag'; mag.position.set(0, -0.035, -0.07);
-    part(mag, RB1(0.034, 0.06, 0.085, 0.005), m.metal, 0, -0.03, 0);
-    part(mag, RB1(0.038, 0.013, 0.09, 0.004), m.metal, 0, -0.062, 0);
+    const mag=new THREE.Group();mag.name='mag';mag.position.set(0,-0.035,-0.07);
+    part(mag,profile(0.034,[[-0.04,0],[-0.043,-0.054],[0.04,-0.06],[0.045,-0.003]],0.003),m.metal,0,0,0);
+    part(mag,RB1(0.039,0.011,0.092,0.003),m.black,0,-0.061,0);
+    anchor(mag,'reloadGrip',0,-0.035,0);
     g.add(mag);
-    // 枪托：托颈过渡 + 托腮 + 托底橡胶垫
-    part(g, RB1(0.035, 0.1, 0.045, 0.01), m.olive, 0, -0.07, 0.08, 0.3);
-    part(g, RB1(0.05, 0.16, 0.045, 0.01), m.olive, 0, -0.02, 0.3);
-    part(g, RB1(0.042, 0.028, 0.14, 0.008), m.olive, 0, 0.052, 0.24);
-    part(g, RB1(0.04, 0.04, 0.18, 0.01), m.olive, 0, 0.028, 0.22);
-    part(g, BX(0.052, 0.17, 0.014), m.rubber, 0, -0.02, 0.33);
-    for (const x of [-0.013, 0.013]) part(g, CZ(0.006, 0.14), m.black, x, -0.032, -0.37); // 前托下方脚架管
-    anchor(g, 'grip', 0, -0.05, 0.075);
-    anchor(g, 'fore', 0, -0.02, -0.3);
-    anchor(g, 'muzzle', 0, 0.05, -0.84);
-    anchor(g, 'eject', 0.03, 0.06, -0.08);
-    anchor(g, 'magwell', 0, -0.05, -0.07);
-    anchor(g, 'scope', 0, 0.118, 0.13);
+    guard(g,m.black,0.005,0.057,-0.02,-0.061,0.014);
+    part(g,RB1(0.007,0.024,0.008,0.002),m.steel,0,-0.039,0.031,0.24);
+    for(const x of [-0.014,0.014]) {
+      part(g,CZ(0.005,0.13,10),m.black,x,-0.035,-0.366);
+      part(g,RB1(0.012,0.01,0.025,0.002),m.rubber,x,-0.041,-0.43);
+    }
+    part(g,CX(0.004,0.061,8),m.steel,0,-0.04,0.271);
+    anchor(g,'grip',0,-0.05,0.075);
+    anchor(g,'fore',0,-0.02,-0.3);
+    anchor(g,'muzzle',0,0.05,-0.84);
+    anchor(g,'eject',0.03,0.06,-0.08);
+    anchor(g,'magwell',0,-0.05,-0.07);
+    anchor(g,'scope',0,0.118,0.13);
     return g;
   },
   mp5(m) {
-    const g = new THREE.Group();
-    // 机匣 + 金属上盖，取消整块黑
-    part(g, RB(0.042, 0.058, 0.32, 0.014), m.black, 0, 0.042, -0.09);
-    part(g, RB1(0.04, 0.016, 0.3, 0.006), m.metal, 0, 0.074, -0.09);
-    // 护木：两段收口 + 前箍 + 横向防滑槽
-    part(g, RB1(0.046, 0.05, 0.15, 0.012), m.black, 0, 0.02, -0.31);
-    part(g, RB1(0.04, 0.032, 0.13, 0.008), m.black, 0, 0.052, -0.3);
-    for (const z of [-0.29, -0.315]) part(g, BX(0.048, 0.036, 0.006), m.metal, 0, 0.02, z);
-    part(g, CY(0.024, 0.014, 14), m.metal, 0, 0.032, -0.385);
-    // 枪管 + 枪口
-    part(g, CZ(0.0115, 0.08, 12), m.metal, 0, 0.046, -0.41);
-    part(g, CZ(0.0145, 0.024, 12), m.metal, 0, 0.046, -0.45);
-    part(g, CZ(0.009, 0.01, 12), m.black, 0, 0.046, -0.459);
-    // 准星护环 + 柱 + 照门鼓
-    part(g, CY(0.016, 0.02, 14), m.black, 0, 0.083, -0.38);
-    part(g, BX(0.004, 0.018, 0.004), m.steel, 0, 0.088, -0.38);
-    part(g, CY(0.014, 0.024, 12), m.black, 0, 0.085, 0.02);
-    part(g, BX(0.02, 0.006, 0.008), m.metal, 0, 0.1, 0.02);
-    // 拉机柄管（前段裸钢）
-    part(g, CZ(0.009, 0.14), m.black, -0.024, 0.066, -0.3);
-    part(g, CZ(0.007, 0.03), m.steel, -0.024, 0.066, -0.377);
-    part(g, CX(0.0095, 0.016, 10), m.steel, -0.036, 0.066, -0.368);      // 拉机柄头
-    part(g, RB1(0.024, 0.012, 0.05, 0.003), m.black, 0, -0.018, -0.33);   // 护手挡块
-    // 弹匣：插入口 + 弯匣 + 底板
-    const mag = curvedMag(g, m.metal, 4, 0, 0.0, -0.13, 0.026, 0.042, 0.052, 0.14);
-    part(mag, RB1(0.032, 0.012, 0.062, 0.004), m.metal, 0, -0.19, -0.031); // 弹匣底板
-    part(g, RB1(0.032, 0.02, 0.056, 0.005), m.black, 0, -0.012, -0.13);
-    // 握把：聚合物 + 金属底盖 + 扳机
-    part(g, RB1(0.03, 0.095, 0.04, 0.008), m.black, 0, -0.04, 0.03, 0.3);
-    part(g, RB1(0.032, 0.013, 0.042, 0.005), m.metal, 0, -0.082, 0.042, 0.3);
-    part(g, BX(0.008, 0.024, 0.008), m.steel, 0, -0.032, -0.03);
-    part(g, RB1(0.03, 0.022, 0.05, 0.005), m.black, 0, 0.062, 0.09);
-    // 伸缩托：双导轨 + 托底板 + 橡胶垫
-    for (const x of [-0.016, 0.016]) part(g, CZ(0.005, 0.2), m.metal, x, 0.035, 0.15);
-    part(g, RB1(0.045, 0.07, 0.018, 0.005), m.black, 0, 0.03, 0.25);
-    part(g, RB1(0.047, 0.02, 0.012, 0.004), m.rubber, 0, 0.026, 0.259);
-    part(g, BX(0.012, 0.012, 0.03), m.black, -0.02, 0.07, -0.2, 0, 0, 0, 'bolt');
-    anchor(g, 'grip', 0, -0.035, 0.03);
-    anchor(g, 'fore', 0, 0.0, -0.3);
-    anchor(g, 'muzzle', 0, 0.046, -0.46);
-    anchor(g, 'eject', 0.025, 0.055, -0.07);
-    anchor(g, 'magwell', 0, -0.02, -0.13);
+    const g=new THREE.Group();
+    // 冲压圆顶上机匣及收紧的聚合物下机匣。
+    part(g,profile(0.041,[[-0.255,0.027],[-0.249,0.063],[0.059,0.064],[0.075,0.05],[0.071,0.014],[-0.173,0.012]],0.003),m.metal,0,0,0);
+    part(g,CZ(0.0185,0.305,14),m.metal,0,0.061,-0.091);
+    part(g,profile(0.033,[[-0.152,0.013],[-0.099,-0.02],[-0.079,-0.021],[-0.077,0],[0.047,-0.004],[0.059,0.022]],0.003),m.black,0,0,0);
+    part(g,profile(0.048,[[-0.385,0.028],[-0.377,0.056],[-0.251,0.063],[-0.228,0.031],[-0.25,-0.003],[-0.364,-0.006],[-0.385,0.008]],0.005),m.black,0,0,0);
+    for(const z of [-0.274,-0.31,-0.346]) part(g,BX(0.049,0.009,0.005),m.metal,0,0.031,z);
+    part(g,CZ(0.0115,0.08,12),m.metal,0,0.046,-0.41);
+    part(g,CZ(0.0145,0.025,12),m.metal,0,0.046,-0.4415);
+    part(g,CZ(0.0085,0.004,12),m.black,0,0.046,-0.4535);
+    part(g,new THREE.TorusGeometry(0.0138,0.0028,4,14),m.metal,0,0.087,-0.38);
+    part(g,RB1(0.019,0.028,0.016,0.003),m.metal,0,0.063,-0.38);
+    part(g,BX(0.003,0.021,0.004),m.steel,0,0.081,-0.38);
+    part(g,CY(0.0135,0.019,12),m.black,0,0.087,0.021);
+    part(g,CZ(0.003,0.025,8),m.steel,0,0.092,0.021);
+    part(g,CZ(0.008,0.146,12),m.metal,-0.022,0.063,-0.3);
+    part(g,CX(0.008,0.017,10),m.black,-0.033,0.063,-0.367);
+    curvedMag(g,m.metal,4,0,0,-0.13,0.026,0.042,0.052,0.14,m.black);
+    part(g,RB1(0.032,0.021,0.057,0.004),m.black,0,-0.009,-0.13);
+    guard(g,m.black,-0.058,0.006,0.005,-0.047,0.018);
+    part(g,RB1(0.007,0.026,0.007,0.002),m.steel,0,-0.024,-0.027,0.18);
+    part(g,profile(0.03,[[0.011,0.008],[0.044,0.006],[0.064,-0.078],[0.036,-0.096],[0.018,-0.084],[0.003,-0.015]],0.004),m.black,0,0,0);
+    for(const x of [-0.016,0.016]) part(g,CZ(0.0045,0.21,10),m.metal,x,0.035,0.152);
+    part(g,profile(0.045,[[0.24,0.063],[0.26,0.064],[0.26,-0.009],[0.243,-0.005],[0.237,0.041]],0.003),m.black,0,0,0);
+    part(g,RB1(0.048,0.074,0.01,0.003),m.rubber,0,0.027,0.264);
+    part(g,RB1(0.003,0.015,0.044,0.001),m.black,0.022,0.046,-0.057);
+    part(g,BX(0.012,0.012,0.03),m.black,-0.02,0.07,-0.2,0,0,0,'bolt');
+    anchor(g,'grip',0,-0.035,0.03);
+    anchor(g,'fore',0,0,-0.3);
+    anchor(g,'muzzle',0,0.046,-0.46);
+    anchor(g,'eject',0.025,0.055,-0.07);
+    anchor(g,'magwell',0,-0.02,-0.13);
     return g;
   },
   deagle(m) {
-    const g = new THREE.Group();
-    // 套筒：顶部散热肋 + 尾部防滑纹 + 前端衬套
-    const slide = new THREE.Group(); slide.name = 'slide'; g.add(slide);
-    part(slide, RB(0.032, 0.042, 0.255, 0.006), m.steel, 0, 0.062, -0.075);
-    part(slide, BX(0.012, 0.006, 0.23), m.metal, 0, 0.086, -0.075);
-    for (let i = 0; i < 6; i++) part(slide, BX(0.034, 0.03, 0.003), m.metal, 0, 0.062, 0.014 + i * 0.009);
-    part(slide, BX(0.004, 0.01, 0.006), m.steel, 0, 0.094, -0.19);
-    part(slide, RB1(0.028, 0.016, 0.013, 0.004), m.metal, 0, 0.08, 0.043);
-    part(slide, RB1(0.009, 0.013, 0.009, 0.003), m.black, 0, 0.048, -0.194);
-    // 下机匣：导轨 + 扳机护圈 + 击锤
-    part(g, RB1(0.03, 0.032, 0.18, 0.005), m.metal, 0, 0.026, -0.05);
-    part(g, BX(0.018, 0.008, 0.1), m.metal, 0, 0.008, -0.11);
-    part(g, BX(0.006, 0.006, 0.07), m.metal, 0, -0.003, -0.035);
-    part(g, BX(0.006, 0.03, 0.006), m.metal, 0, -0.018, -0.07);
-    part(g, RB1(0.008, 0.026, 0.01, 0.003), m.steel, 0, -0.02, -0.036);
-    part(g, RB1(0.01, 0.02, 0.014, 0.004), m.metal, 0, 0.076, 0.06);
-    // 握把：粗糙橡胶 + 底托 + 后缘托
-    part(g, RB1(0.034, 0.115, 0.055, 0.012), m.rubber, 0, -0.04, 0.025, 0.24);
-    for (const y of [-0.03, -0.075]) part(g, BX(0.036, 0.005, 0.05), m.metal, 0, y, 0.025 + (y + 0.052) * 0.24); // 握把分模线
-    part(g, RB1(0.034, 0.014, 0.028, 0.005), m.rubber, 0, -0.094, 0.043, 0.24);
-    part(g, RB1(0.03, 0.01, 0.02, 0.004), m.metal, 0, 0.0, 0.05);
-    const mag = new THREE.Group(); mag.name = 'mag'; mag.position.set(0, -0.03, 0.02); mag.rotation.x = 0.24;
-    part(mag, BX(0.022, 0.1, 0.04), m.metal, 0, -0.04, 0);
-    part(mag, BX(0.026, 0.012, 0.044), m.metal, 0, -0.094, 0);
+    const g=new THREE.Group(),slide=new THREE.Group();slide.name='slide';g.add(slide);
+    // 宽厚套筒的斜肩与顶脊保留银灰主体，枪口加深色孔。
+    part(slide,profile(0.034,[[-0.202,0.046],[-0.195,0.079],[-0.184,0.084],[0.032,0.084],[0.051,0.075],[0.052,0.047],[0.034,0.04],[-0.186,0.04]],0.002),m.steel,0,0,0);
+    part(slide,RB1(0.014,0.007,0.224,0.002),m.metal,0,0.086,-0.075);
+    serrations(slide,m.metal,0.0172,0.061,0.008,6,0.007,0.023);
+    part(slide,BX(0.004,0.01,0.007),m.black,0,0.094,-0.187);
+    for(const x of [-0.009,0.009]) part(slide,RB1(0.006,0.014,0.01,0.002),m.metal,x,0.089,0.035);
+    part(slide,CZ(0.0085,0.005,12),m.black,0,0.062,-0.203);
+    part(slide,profile(0.0015,[[-0.052,0.076],[-0.013,0.076],[-0.013,0.059],[-0.046,0.059]],0),m.metal,0.0175,0,0);
+    part(g,profile(0.03,[[-0.166,0.039],[-0.17,0.019],[-0.13,0.009],[-0.009,0.007],[0.045,0.02],[0.053,0.038]],0.002),m.metal,0,0,0);
+    guard(g,m.metal,-0.078,-0.006,0.012,-0.042,0.015);
+    part(g,profile(0.007,[[-0.04,0.001],[-0.03,-0.011],[-0.03,-0.024],[-0.035,-0.032],[-0.042,-0.029],[-0.039,-0.015]],0.0007),m.steel,0,0,0);
+    part(g,RB1(0.012,0.018,0.015,0.003),m.metal,0,0.074,0.06,-0.2);
+    part(g,profile(0.034,[[-0.002,0.009],[0.038,0.012],[0.058,-0.087],[0.046,-0.099],[0.017,-0.095],[-0.008,-0.025]],0.004),m.rubber,0,0,0);
+    for(const x of [-0.0172,0.0172]) {
+      part(g,profile(0.0015,[[0.002,-0.014],[0.029,-0.008],[0.043,-0.075],[0.02,-0.08]],0),m.black,x,0,0);
+      for(const y of [-0.022,-0.073]) part(g,CX(0.0032,0.0018,8),m.metal,x,y,0.017-(y+0.022)*0.2);
+    }
+    const mag=new THREE.Group();mag.name='mag';mag.position.set(0,-0.03,0.02);mag.rotation.x=0.24;
+    part(mag,RB1(0.022,0.088,0.04,0.003),m.metal,0,-0.018,0);
+    part(mag,RB1(0.032,0.012,0.047,0.003),m.black,0,-0.067,0);
+    anchor(mag,'reloadGrip',0,-0.039,0);
     g.add(mag);
-    anchor(g, 'grip', 0, -0.04, 0.03);
-    anchor(g, 'fore', -0.02, -0.05, 0.02);
-    anchor(g, 'muzzle', 0, 0.062, -0.21);
-    anchor(g, 'eject', 0.02, 0.07, -0.03);
-    anchor(g, 'magwell', 0, -0.1, 0.04);
+    anchor(g,'grip',0,-0.04,0.03);
+    anchor(g,'fore',-0.02,-0.05,0.02);
+    anchor(g,'muzzle',0,0.062,-0.21);
+    anchor(g,'eject',0.02,0.07,-0.03);
+    anchor(g,'magwell',0,-0.1,0.04);
     return g;
   },
   usp(m) {
-    const g = new THREE.Group();
-    // 套筒：细长（比 deagle 窄）、顶部防反光肋、尾部防滑纹
-    const slide = new THREE.Group(); slide.name = 'slide'; g.add(slide);
-    part(slide, RB(0.028, 0.038, 0.215, 0.005), m.steel, 0, 0.06, -0.075);
-    part(slide, RB1(0.014, 0.006, 0.2, 0.002), m.metal, 0, 0.081, -0.075);
-    part(slide, RB1(0.008, 0.01, 0.02, 0.003), m.metal, 0, 0.08, -0.176);
-    part(slide, BX(0.003, 0.008, 0.004), m.steel, 0, 0.088, -0.176);
-    part(slide, RB1(0.024, 0.011, 0.018, 0.003), m.metal, 0, 0.079, 0.022);
-    for (let i = 0; i < 3; i++) part(slide, BX(0.03, 0.03, 0.003), m.black, 0, 0.06, -0.002 + i * 0.011);
-    part(slide, BX(0.02, 0.009, 0.05), m.black, 0.008, 0.064, -0.03);
-    part(slide, CZ(0.0088, 0.011, 12), m.steel, 0, 0.06, -0.188);
-    // 下机匣：深灰聚合物 + 附件导轨
-    part(g, RB1(0.026, 0.032, 0.15, 0.005), m.black, 0, 0.026, -0.06);
-    part(g, BX(0.016, 0.006, 0.08), m.black, 0, 0.008, -0.09);
-    // 独立扳机护圈（前壁 + 下缘）
-    part(g, RB1(0.008, 0.05, 0.008, 0.002), m.black, 0, -0.033, -0.078);
-    part(g, RB1(0.008, 0.008, 0.062, 0.002), m.black, 0, -0.054, -0.047);
-    part(g, RB1(0.007, 0.026, 0.009, 0.002), m.steel, 0, -0.03, -0.04);
-    part(g, RB1(0.006, 0.01, 0.026, 0.002), m.metal, 0.014, 0.034, -0.015);
-    // 握把：粗糙聚合物 + 防滑纹 + 底托
-    part(g, RB1(0.03, 0.115, 0.05, 0.008), m.rubber, 0, -0.045, 0.015, 0.18);
-    for (const y of [-0.032, -0.062]) part(g, BX(0.032, 0.005, 0.042), m.rubber, 0, y, 0.015 + (y + 0.047) * 0.18);
-    part(g, RB1(0.03, 0.012, 0.052, 0.004), m.rubber, 0, -0.108, 0.025, 0.18);
-    // 弹匣：藏进握把，底板外露
-    const mag = new THREE.Group(); mag.name = 'mag'; mag.position.set(0, -0.09, 0.02); mag.rotation.x = 0.18;
-    part(mag, RB1(0.024, 0.058, 0.04, 0.003), m.steel, 0, -0.028, 0);
-    part(mag, RB1(0.028, 0.008, 0.045, 0.003), m.black, 0, -0.058, 0);
+    const g=new THREE.Group(),slide=new THREE.Group();slide.name='slide';g.add(slide);
+    // 细长深灰套筒、低斜肩与较长下机匣，与银色 deagle 和短 Glock 区分。
+    part(slide,profile(0.028,[[-0.185,0.046],[-0.179,0.075],[-0.163,0.08],[0.018,0.08],[0.034,0.07],[0.035,0.045]],0.0018),m.metal,0,0,0);
+    part(slide,RB1(0.015,0.004,0.19,0.0015),m.black,0,0.081,-0.074);
+    part(slide,RB1(0.006,0.012,0.01,0.0015),m.black,0,0.087,-0.173);
+    part(slide,BX(0.0025,0.006,0.004),m.steel,0,0.093,-0.173);
+    for(const x of [-0.0085,0.0085]) part(slide,RB1(0.005,0.012,0.011,0.0015),m.black,x,0.085,0.019);
+    serrations(slide,m.black,0.0143,0.06,-0.005,5,0.007,0.024);
+    part(slide,profile(0.0015,[[-0.055,0.075],[-0.017,0.075],[-0.012,0.058],[-0.05,0.058]],0),m.black,0.0147,0,0);
+    part(slide,CZ(0.0088,0.012,12),m.steel,0,0.06,-0.186);
+    part(slide,CZ(0.0056,0.003,12),m.black,0,0.06,-0.192);
+    part(g,profile(0.028,[[-0.15,0.04],[-0.151,0.016],[-0.107,0.006],[-0.002,0.005],[0.033,0.02],[0.038,0.036]],0.0025),m.black,0,0,0);
+    for(const z of [-0.102,-0.122]) part(g,BX(0.029,0.003,0.003),m.metal,0,0.007,z);
+    guard(g,m.black,-0.085,-0.005,0.008,-0.054,0.017);
+    part(g,RB1(0.007,0.026,0.009,0.002),m.steel,0,-0.027,-0.039,0.15);
+    part(g,profile(0.03,[[-0.011,0.006],[0.032,0.006],[0.052,-0.097],[0.041,-0.11],[0.008,-0.104],[-0.016,-0.025]],0.003),m.black,0,0,0);
+    for(const x of [-0.0152,0.0152]) part(g,profile(0.0015,[[-0.004,-0.019],[0.025,-0.016],[0.04,-0.086],[0.011,-0.092]],0),m.rubber,x,0,0);
+    part(g,RB1(0.004,0.009,0.025,0.001),m.steel,0.016,0.027,-0.022);
+    part(g,CX(0.003,0.033,8),m.metal,0,0.019,0.007);
+    const mag=new THREE.Group();mag.name='mag';mag.position.set(0,-0.09,0.02);mag.rotation.x=0.18;
+    part(mag,RB1(0.024,0.09,0.04,0.003),m.steel,0,0.025,0);
+    part(mag,RB1(0.031,0.011,0.047,0.003),m.black,0,-0.023,0);
+    anchor(mag,'reloadGrip',0,0.005,0);
     g.add(mag);
-    anchor(g, 'grip', 0, -0.04, 0.02);
-    anchor(g, 'fore', -0.02, -0.045, 0.0);
-    anchor(g, 'muzzle', 0, 0.06, -0.198);
-    anchor(g, 'eject', 0.022, 0.066, -0.02);
-    anchor(g, 'magwell', 0, -0.088, 0.02);
+    anchor(g,'grip',0,-0.04,0.02);
+    anchor(g,'fore',-0.02,-0.045,0);
+    anchor(g,'muzzle',0,0.06,-0.198);
+    anchor(g,'eject',0.022,0.066,-0.02);
+    anchor(g,'magwell',0,-0.088,0.02);
     return g;
   },
   glock18(m) {
-    const g = new THREE.Group();
-    // 套筒：短、方、前段平切（与 USP/deagle 轮廓明显不同）
-    const slide = new THREE.Group(); slide.name = 'slide'; g.add(slide);
-    part(slide, RB(0.034, 0.036, 0.16, 0.007), m.metal, 0, 0.06, -0.055);
-    part(slide, RB1(0.015, 0.005, 0.145, 0.002), m.metal, 0, 0.079, -0.055);
-    part(slide, RB1(0.009, 0.012, 0.018, 0.003), m.black, 0, 0.08, -0.126);
-    part(slide, BX(0.003, 0.008, 0.004), m.steel, 0, 0.088, -0.126);
-    part(slide, RB1(0.028, 0.012, 0.024, 0.004), m.black, 0, 0.078, 0.03);
-    for (let i = 0; i < 3; i++) part(slide, BX(0.036, 0.026, 0.003), m.black, 0, 0.06, 0.008 + i * 0.011);
-    part(slide, BX(0.022, 0.008, 0.028), m.metal, 0.009, 0.064, -0.012);
-    part(slide, CZ(0.0095, 0.014, 12), m.steel, 0, 0.06, -0.135);
-    // 聚合物机匣：比 USP 更厚更方
-    part(g, RB1(0.032, 0.038, 0.13, 0.005), m.black, 0, 0.028, -0.045);
-    part(g, BX(0.03, 0.012, 0.06), m.black, 0, 0.006, -0.07);
-    part(g, RB1(0.03, 0.036, 0.008, 0.002), m.black, 0, -0.015, -0.084);
-    part(g, RB1(0.03, 0.008, 0.056, 0.002), m.black, 0, -0.033, -0.056);
-    part(g, RB1(0.008, 0.024, 0.009, 0.002), m.steel, 0, -0.012, -0.04);
-    part(g, BX(0.008, 0.008, 0.03), m.steel, 0.017, 0.04, -0.012);       // 套筒释放杆
-    // 握把：厚实深色聚合物 + 防滑纹 + 底托
-    part(g, RB1(0.032, 0.125, 0.054, 0.008), m.rubber, 0, -0.05, 0.005, 0.16);
-    for (const y of [-0.036, -0.07]) part(g, BX(0.034, 0.006, 0.046), m.rubber, 0, y, 0.005 + (y + 0.053) * 0.16);
-    part(g, RB1(0.033, 0.014, 0.056, 0.004), m.black, 0, -0.116, 0.014, 0.16);
-    // 弹匣：短肥 + 指托底板
-    const mag = new THREE.Group(); mag.name = 'mag'; mag.position.set(0, -0.095, 0.01); mag.rotation.x = 0.16;
-    part(mag, RB1(0.028, 0.055, 0.044, 0.003), m.steel, 0, -0.026, 0);
-    part(mag, RB1(0.032, 0.009, 0.05, 0.003), m.black, 0, -0.055, 0);
+    const g=new THREE.Group(),slide=new THREE.Group();slide.name='slide';g.add(slide);
+    part(slide,profile(0.034,[[-0.136,0.045],[-0.135,0.072],[-0.13,0.078],[0.02,0.078],[0.027,0.072],[0.028,0.044]],0.0014),m.metal,0,0,0);
+    part(slide,RB1(0.017,0.003,0.145,0.001),m.black,0,0.08,-0.055);
+    part(slide,RB1(0.005,0.012,0.009,0.0015),m.black,0,0.086,-0.126);
+    part(slide,BX(0.0025,0.006,0.004),m.steel,0,0.092,-0.126);
+    for(const x of [-0.009,0.009]) part(slide,RB1(0.005,0.011,0.011,0.0015),m.black,x,0.085,0.017);
+    serrations(slide,m.black,0.0172,0.061,0.002,5,0.0048,0.023);
+    part(slide,profile(0.0013,[[-0.032,0.074],[-0.003,0.074],[-0.003,0.061],[-0.027,0.061]],0),m.black,0.0176,0,0);
+    part(slide,CZ(0.0095,0.014,12),m.steel,0,0.06,-0.135);
+    part(slide,CZ(0.006,0.002,12),m.black,0,0.06,-0.142);
+    part(g,profile(0.034,[[-0.113,0.041],[-0.112,0.005],[-0.084,-0.005],[-0.018,-0.002],[0.034,0.022],[0.036,0.039]],0.002),m.black,0,0,0);
+    guard(g,m.black,-0.089,-0.011,0.005,-0.037,0.025);
+    part(g,RB1(0.007,0.023,0.008,0.002),m.steel,0,-0.014,-0.043,0.08);
+    part(g,profile(0.032,[[-0.02,0.008],[0.027,0.01],[0.049,-0.105],[0.032,-0.118],[-0.004,-0.11],[-0.028,-0.02]],0.003),m.black,0,0,0);
+    for(const x of [-0.0162,0.0162]) part(g,profile(0.0015,[[-0.017,-0.017],[0.019,-0.014],[0.033,-0.09],[-0.002,-0.096]],0),m.rubber,x,0,0);
+    part(g,RB1(0.003,0.007,0.026,0.001),m.metal,0.018,0.028,-0.016);
+    part(g,CX(0.0027,0.037,8),m.metal,0,0.02,-0.002);
+    const mag=new THREE.Group();mag.name='mag';mag.position.set(0,-0.095,0.01);mag.rotation.x=0.16;
+    part(mag,RB1(0.028,0.10,0.044,0.003),m.steel,0,0.032,0);
+    part(mag,profile(0.034,[[-0.025,-0.021],[-0.026,-0.034],[0.023,-0.034],[0.028,-0.026],[0.023,-0.021]],0.002),m.black,0,0,0);
+    anchor(mag,'reloadGrip',0,0.006,0);
     g.add(mag);
-    anchor(g, 'grip', 0, -0.045, 0.01);
-    anchor(g, 'fore', -0.02, -0.04, -0.01);
-    anchor(g, 'muzzle', 0, 0.06, -0.1465);
-    anchor(g, 'eject', 0.024, 0.064, -0.01);
-    anchor(g, 'magwell', 0, -0.093, 0.01);
+    anchor(g,'grip',0,-0.045,0.01);
+    anchor(g,'fore',-0.02,-0.04,-0.01);
+    anchor(g,'muzzle',0,0.06,-0.1465);
+    anchor(g,'eject',0.024,0.064,-0.01);
+    anchor(g,'magwell',0,-0.093,0.01);
     return g;
   },
   knife(m) {
-    const g = new THREE.Group();
-    const sh = new THREE.Shape();
-    sh.moveTo(0, -0.014); sh.lineTo(0.15, -0.012); sh.quadraticCurveTo(0.19, -0.008, 0.2, 0.012);
-    sh.lineTo(0.13, 0.016); sh.lineTo(0.12, 0.012); sh.lineTo(0.03, 0.016); sh.lineTo(0, 0.016); sh.closePath();
-    const bg = new THREE.ExtrudeGeometry(sh, { depth: 0.004, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.002, bevelSegments: 1 });
-    bg.translate(0, 0, -0.002); bg.rotateY(Math.PI / 2);
-    part(g, bg, m.blade, 0, 0.0, -0.035);
-    part(g, CZ(0.004, 0.014, 8), m.steel, 0, 0.0, -0.152);          // 刀尖加强
-    part(g, RB1(0.02, 0.05, 0.014, 0.003), m.metal, 0, 0.0, -0.03);
-    part(g, RB1(0.028, 0.013, 0.016, 0.004), m.metal, 0, 0.0, -0.024); // 护手横挡
-    // 握把：橡胶 + 防滑槽 + 金属尾帽
-    part(g, RB1(0.024, 0.03, 0.11, 0.01), m.rubber, 0, 0.0, 0.03);
-    for (let i = 0; i < 4; i++) part(g, BX(0.026, 0.032, 0.004), m.black, 0, 0, -0.005 + i * 0.022);
-    part(g, RB1(0.026, 0.032, 0.022, 0.006), m.metal, 0, 0, 0.086);
-    part(g, RB1(0.021, 0.026, 0.012, 0.004), m.steel, 0, 0, 0.1);
-    anchor(g, 'grip', 0, 0, 0.03);
-    anchor(g, 'muzzle', 0, 0, -0.23);
+    const g=new THREE.Group();
+    // 菱形刀脊渐薄至刀锋与刀尖，两个面分别表现厚背与打磨刃面。
+    part(g,bladeFacet(true),m.steel,0,0,0);
+    part(g,bladeFacet(false),m.blade,0,0,0);
+    part(g,profile(0.022,[[-0.038,0.026],[-0.026,0.029],[-0.022,0.021],[-0.022,-0.024],[-0.031,-0.028],[-0.04,-0.02]],0.002),m.metal,0,0,0);
+    part(g,profile(0.025,[[-0.021,0.015],[-0.005,0.016],[0.076,0.011],[0.088,0.005],[0.086,-0.012],[-0.004,-0.017],[-0.022,-0.011]],0.003),m.rubber,0,0,0);
+    for(const z of [-0.003,0.02,0.043,0.066]) part(g,RB1(0.026,0.027,0.004,0.0015),m.black,0,-0.001,z);
+    part(g,RB1(0.028,0.026,0.016,0.004),m.metal,0,0,0.09);
+    part(g,CX(0.004,0.03,8),m.steel,0,0,0.091);
+    anchor(g,'grip',0,0,0.03);
+    anchor(g,'muzzle',0,0,-0.23);
     return g;
   },
   he(m) {
-    const g = new THREE.Group();
-    // 弹体：压扁球 + 腰部刻槽 + 颈口
-    const body = new THREE.SphereGeometry(0.034, 16, 12); body.scale(1, 1.25, 1);
-    part(g, body, m.olive, 0, 0, 0);
-    part(g, CY(0.0305, 0.007, 14), m.olive, 0, 0.008, 0);
-    part(g, CY(0.0145, 0.03, 10), m.metal, 0, 0.041, 0);
-    // 保险杆 + 拉环 + 引信座
-    const lever = part(g, RB1(0.012, 0.072, 0.006, 0.002), m.metal, 0.0, 0.033, 0.0245, -0.2, 0, 0, 'lever');
-    void lever;
-    const pin = part(g, new THREE.TorusGeometry(0.012, 0.0022, 5, 10), m.steel, 0.022, 0.055, 0, 0, Math.PI / 2, 0, 'pin');
-    void pin;
-    part(g, BX(0.062, 0.014, 0.004), m.tan, 0, -0.004, 0.0315);          // 弹体识别带
-    part(g, CY(0.0105, 0.011, 8), m.steel, 0, 0.059, 0);
-    anchor(g, 'grip', 0, 0, 0.0);
-    anchor(g, 'muzzle', 0, 0, -0.04);
+    const g=new THREE.Group();
+    const outline=[new THREE.Vector2(0,-0.043),new THREE.Vector2(0.019,-0.04),new THREE.Vector2(0.03,-0.028),new THREE.Vector2(0.034,-0.013),new THREE.Vector2(0.034,0.009),new THREE.Vector2(0.03,0.029),new THREE.Vector2(0.017,0.041),new THREE.Vector2(0,0.043)];
+    part(g,new THREE.LatheGeometry(outline,16),m.olive,0,0,0);
+    part(g,CY(0.0344,0.004,16),m.tan,0,0.006,0);
+    part(g,CY(0.0135,0.019,12),m.metal,0,0.046,0);
+    part(g,CY(0.01,0.009,12),m.steel,0,0.059,0);
+    // 折弯保险杆贴着弹体，保险销与拉环之间有连接短杆。
+    const lever=new THREE.Group();lever.name='lever';lever.position.set(0,0.033,0.0245);lever.rotation.x=-0.2;g.add(lever);
+    part(lever,profile(0.012,[[-0.027,0.026],[0.006,0.026],[0.01,0.012],[0.006,-0.035],[0.001,-0.038],[0.005,0.011],[0.002,0.021],[-0.027,0.021]],0.0008),m.metal,0,0,0);
+    part(g,new THREE.TorusGeometry(0.012,0.0018,4,12),m.steel,0.022,0.055,0,0,Math.PI/2,0,'pin');
+    part(g,CX(0.0018,0.016,8),m.steel,0.014,0.055,0);
+    part(g,CX(0.003,0.019,8),m.metal,0,0.054,0.012);
+    anchor(g,'grip',0,0,0);
+    anchor(g,'muzzle',0,0,-0.04);
     return g;
   },
 };
 
+// 只在同一静态层内合并；可拆弹匣、套筒、枪栓和保险件保留独立动作节点。
+// 有名字的 Mesh 不合并，避免动画或持握查询失去原部件。
+function mergeStaticParts(root) {
+  const layers = [];
+  root.traverse((o) => { if (o.isGroup) layers.push(o); });
+  for (const layer of layers.reverse()) {
+    const buckets = new Map();
+    for (const o of layer.children) {
+      if (!o.isMesh || o.name || o.children.length || Array.isArray(o.material)) continue;
+      const key = o.material.uuid;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(o);
+    }
+    for (const parts of buckets.values()) {
+      if (parts.length < 2) continue;
+      const geos = parts.map((o) => {
+        o.updateMatrix();
+        const geo = o.geometry.clone().applyMatrix4(o.matrix);
+        if (!geo.index) return geo;
+        const nonIndexed = geo.toNonIndexed();
+        geo.dispose();
+        return nonIndexed;
+      });
+      const geo = mergeGeometries(geos, false);
+      for (const input of geos) input.dispose();
+      if (!geo) continue;
+      for (const o of parts) { layer.remove(o); o.geometry.dispose(); }
+      layer.add(new THREE.Mesh(geo, parts[0].material));
+    }
+  }
+}
+
 export function buildGun(id) {
   const m = gunMaterials();
   const g = builders[id](m);
+  mergeStaticParts(g);
   g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   return g;
 }

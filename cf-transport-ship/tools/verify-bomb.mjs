@@ -58,7 +58,7 @@ async function pageReady(browser, deterministic = true) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(`${BASE}?nolock&q=low`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}?nolock&q=low&bombMap=bomb-test`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.screens.visible === 'home', null, { timeout: 90000 });
   await page.evaluate((controlled) => {
     const g = window.__game;
@@ -112,7 +112,7 @@ async function flow(browser) {
   await shot(page, '01-home');
   await page.locator('#home [data-act="bomb"]').click();
   check('主页爆破入口进入正确设置', await page.locator('#setupTitle').textContent() === '爆破测试场' && await page.locator('#bombRules').isVisible());
-  check('设置明确标注测试场与待提供沙漠灰参考', (await page.locator('#setupDesc').textContent()).includes('CF 沙漠灰参考尚未提供'));
+  check('设置明确标注当前选择的通用回归测试场', (await page.locator('#setupDesc').textContent()).includes('通用 A/B 测试场'));
   await shot(page, '02-setup');
   await page.locator('#menu [data-k="team"] [data-v="BL"]').click();
   await page.locator('#btnStart').click();

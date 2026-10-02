@@ -4,6 +4,7 @@
 // 不直接改 game 的其它状态，也不依赖 hud.js / profile.js 的内部实现。
 import { WEAPONS } from './weapons.js';
 import { weaponsForSlot, slotOfWeapon } from './profile.js';
+import { bombMapInfo } from './map-catalog.js';
 
 const SCREEN_NAMES = ['home', 'personal', 'backpack', 'armory', 'bagSelect'];
 const BAG_CONTEXTS = ['manage', 'select', 'match'];
@@ -39,11 +40,11 @@ const HOME_HTML = `
   <div class="m1Notice" data-role="notice"></div>
   <div class="m1Menu">
     <button class="m1Btn go" data-act="team"><b>团队竞技</b><small>运输船 · 选择初始背包后进入对局</small></button>
-    <button class="m1Btn" data-act="bomb"><b>爆破模式</b><small>爆破测试场 · 5v5 回合对局</small></button>
+    <button class="m1Btn" data-act="bomb"><b>爆破模式</b><small data-role="bombSummary"></small></button>
     <button class="m1Btn" data-act="personal"><b>个人界面</b><small>昵称 · 三个背包 · 武器库</small></button>
     <button class="m1Btn" data-act="settings"><b>设置</b><small>灵敏度 · FOV · 音量 · 画质</small></button>
   </div>
-  <div class="m1Foot">团队竞技使用运输船；爆破模式使用 A/B 测试场。CF 沙漠灰参考待提供，战术投掷物按后续阶段加入。</div>
+  <div class="m1Foot" data-role="homeFoot"></div>
 </div>`;
 
 const PERSONAL_HTML = `
@@ -329,6 +330,9 @@ export class Screens {
   _renderHome() {
     const el = this.screens.home && this.screens.home.querySelector('[data-role=who]');
     if (!el) return;
+    const map = bombMapInfo(this.g.bombMapId);
+    this.screens.home.querySelector('[data-role=bombSummary]').textContent = `${map.name} · 5v5 回合对局`;
+    this.screens.home.querySelector('[data-role=homeFoot]').textContent = `运输船团队竞技，或前往${map.name}进行爆破对局。配置你的三个背包，再进入战场。`;
     const p = this.profile;
     const nick = (p && p.data && p.data.nickname) || DEFAULT_NICK;
     const bagId = p && p.data && p.data.selectedBackpackId;
@@ -373,7 +377,7 @@ export class Screens {
     const preparation = bomb && this.g.bomb && this.g.bomb.phase === 'preparation';
     const meta = {
       manage: ['背包', '管理背包 · 点槽位进入武器库', '「主页默认」是进入团队竞技时使用的背包；点某个槽位可以更换该槽位的装备。'],
-      select: ['选择初始背包', `${bomb ? '爆破测试场' : '团队竞技'} · 开局使用主页默认背包`, '点整张卡片把某个背包设为主页默认，然后进入对局。'],
+      select: ['选择初始背包', `${bomb ? bombMapInfo(this.g.bombMapId).name : '团队竞技'} · 开局使用主页默认背包`, '点整张卡片把某个背包设为主页默认，然后进入对局。'],
       match: bomb
         ? ['更换背包', preparation ? '回合准备 · 立即生效' : '回合对局 · 阵亡后登记下一回合', '准备阶段可立即更换；存活且回合进行时锁定；阵亡后可登记下一回合的配装。']
         : ['更换背包', '局内更换 · 下次复活生效', '「当前使用」是本次出生已在用的背包；「下次复活生效」是已登记、复活时切换的背包。'],

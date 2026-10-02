@@ -17,6 +17,8 @@ import { TouchControls } from './touch.js';
 import { Profile } from './profile.js';
 import { Screens } from './screens.js';
 import { buildBombMap } from './bomb-map.js';
+import { buildDesertMap } from './desert-map.js';
+import { bombMapId } from './map-catalog.js';
 import { BombRules } from './bomb-rules.js';
 import { BombVisual } from './bomb-visual.js';
 import { BombTactics, shouldCommitObjective } from './bomb-tactics.js';
@@ -34,6 +36,7 @@ export class Game {
     this.score = { BL: 0, GR: 0 };
     this.audio = audio;
     this.qs = new URLSearchParams(location.search);
+    this.bombMapId = bombMapId(this.qs.get('bombMap'));
     this.startBagId = null;      // 初始背包选择屏的一次性覆盖，消费后回落到档案默认背包
     this.mode = this.selectedMode = 'team';
     this.bomb = null;
@@ -98,7 +101,7 @@ export class Game {
     }
   }
   loadMap(mode) {
-    const id = mode === 'bomb' ? 'bomb-test' : 'transport-ship';
+    const id = mode === 'bomb' ? bombMapId(this.bombMapId) : 'transport-ship';
     if (this.map?.id === id) return;
     if (this.mapRoot) {
       this.renderer.scene.remove(this.mapRoot);
@@ -119,12 +122,13 @@ export class Game {
     this.mapRoot = new THREE.Group();
     this.renderer.scene.add(this.mapRoot);
     this.world = new World();
-    this.map = mode === 'bomb' ? buildBombMap(this.mapRoot, this.T, this.world) : buildMap(this.mapRoot, this.T, this.world);
+    const build = id === 'desert-gray' ? buildDesertMap : id === 'bomb-test' ? buildBombMap : buildMap;
+    this.map = build(this.mapRoot, this.T, this.world);
     this.map.id = id;
     this.map.name ||= '运输船';
     const bounds = this.map.navBounds || [-36.2, -12.1, 36.2, 12.1];
     this.nav = new NavGrid(this.world, ...bounds, 0.5, 0.42);
-    if (this.env) this.env.setMapKind(mode === 'bomb' ? 'land' : 'ship');
+    if (this.env) this.env.setMapKind(mode === 'bomb' ? 'land' : 'ship', this.map.shadowBounds);
     if (this.fx) this.fx.setMap(this.map);
     this.hud.buildRadar(this.world, this.map);
     if (this.env) this.lampLights();
@@ -175,8 +179,10 @@ export class Game {
     this.startMatch();
   }
   startBombMatch(options = {}) {
+    const { mapId = this.bombMapId, ...rules } = options;
+    this.bombMapId = bombMapId(mapId);
     this.mode = this.selectedMode = 'bomb';
-    this.bomb = new BombRules({ now: this.time, ...options });
+    this.bomb = new BombRules({ now: this.time, ...rules });
     this.screens.closeAll();
     this.startMatch();
   }
@@ -234,7 +240,7 @@ export class Game {
     this.playing = true; this.paused = false; this.ended = false;
     this.hud.show(null);
     this.lock();
-    if (this.bomb) this.hud.toast(`爆破测试场 · ${this.bomb.attackTeam === my ? '进攻方：携带 C4 前往 A/B 区' : '防守方：守住 A/B 区，安包后拆除 C4'}`, 4);
+    if (this.bomb) this.hud.toast(`${this.map.name} · ${this.bomb.attackTeam === my ? '进攻方：携带 C4 前往 A/B 区' : '防守方：守住 A/B 区，安包后拆除 C4'}`, 4);
     else {
       this.timers.push({ t: this.time + 0.4, fn: () => audio.announce('Go go go!') });
       this.hud.toast(`团队竞技 · 率先达到 <b style="color:#f5b321">${this.goal}</b> 击杀的队伍获胜`, 3.5);

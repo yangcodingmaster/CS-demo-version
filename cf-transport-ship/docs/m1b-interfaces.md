@@ -2,6 +2,13 @@
 
 M1B（枪械精修 + USP / Glock-18）的共享契约，先于编码确定。验收标准见 [game-design.md](game-design.md) 的 M1B 段与「枪械美术与新增副武器」。基线为 M1 分支 `feat/m1b-weapons` 起点 `834b26f`。手机端自 2026-10-02 起不作为开发与验收项。
 
+后续精修补充（2026-10-02）：Yang 已授权进一步精修现有武器与动作，因此下文“旧动作保持不变”只描述 M1B 原阶段。本轮允许调整持枪构图、手套、检视和换弹轨迹，实际射击数值、视觉后坐幅度及动作总时长保持。当前实现与证据以 `game-design.md` 最新交付段为准。
+
+- `mag` 可提供子锚点 `reloadGrip`，表示换弹时手掌应贴合的位置；缺失时 ViewModel 使用旧偏移回退。
+- AWM 的 `bolt` 提供 `boltGrip` 与 `boltHandle`，手跟随当前帧的锚点变换，不能再依赖 `children[1]`。
+- `buildGun()` 在同一静态层按材质合并无名网格，保留具名 Mesh、锚点及动作 Group。修改模型时不得将 `mag/slide/bolt/pin/lever` 合进根层。
+- 逐件彩色预览与第一人称动作分别用 `tools/capture-weapon-studio.mjs` 和 `tools/verify-weapon-poses.mjs` 验证。前后面数计算见 `tools/summarize-weapon-polish.mjs`。
+
 ## 文件归属（并行前先定，避免互改）
 
 | 文件 | 归属 | 说明 |

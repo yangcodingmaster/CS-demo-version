@@ -1,18 +1,20 @@
 // 第一人称武器与手臂
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, gunMaterials } from './guns.js';
 import { WEAPONS } from './weapons.js';
 
 const HIP = {
-  ak47: { p: [0.165, -0.175, -0.55], r: [0.045, 0.165, 0.02] },
-  m4a1: { p: [0.16, -0.18, -0.54], r: [0.045, 0.165, 0.02] },
-  awm: { p: [0.17, -0.185, -0.6], r: [0.04, 0.15, 0.02] },
-  mp5: { p: [0.155, -0.165, -0.5], r: [0.05, 0.17, 0.02] },
-  deagle: { p: [0.085, -0.115, -0.4], r: [0.05, 0.1, 0] },
-  usp: { p: [0.085, -0.115, -0.4], r: [0.05, 0.1, 0] },
-  glock18: { p: [0.09, -0.125, -0.42], r: [0.05, 0.11, 0] },
-  knife: { p: [0.17, -0.15, -0.34], r: [0.35, -0.25, 0.55] },
-  he: { p: [0.13, -0.12, -0.3], r: [0.1, -0.2, 0.2] },
+  ak47: { p: [0.125, -0.135, -0.71], r: [0.045, 0.145, 0.02] },
+  m4a1: { p: [0.125, -0.155, -0.7], r: [0.045, 0.145, 0.02] },
+  awm: { p: [0.135, -0.125, -0.78], r: [0.04, 0.135, 0.02] },
+  mp5: { p: [0.12, -0.145, -0.66], r: [0.05, 0.15, 0.02] },
+  deagle: { p: [0.09, -0.105, -0.44], r: [0.05, 0.1, 0] },
+  usp: { p: [0.09, -0.092, -0.43], r: [0.05, 0.1, 0] },
+  glock18: { p: [0.095, -0.093, -0.44], r: [0.05, 0.11, 0] },
+  knife: { p: [0.1, -0.1, -0.4], r: [0.32, -0.7, 0.4] },
+  he: { p: [0.125, -0.1, -0.36], r: [0.1, -0.2, 0.2] },
 };
 const KICK = {
   ak47: [0.04, 0.07], m4a1: [0.032, 0.05], awm: [0.09, 0.2], mp5: [0.024, 0.035],
@@ -31,6 +33,29 @@ const SLIDE_RELEASE = { pistol: 0.03 };
 
 const ease = (t) => t * t * (3 - 2 * t);
 const seg = (f, a, b) => Math.min(1, Math.max(0, (f - a) / (b - a)));
+
+// 静态手套合批：圆润掌面与弯曲手指保持简化轮廓，不增加逐指动画或独立 draw call。
+function gloveGeometry(side) {
+  const pieces = [];
+  const add = (geo, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (g !== geo) geo.dispose();
+    g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z);
+    pieces.push(g);
+  };
+  add(new RoundedBoxGeometry(0.036, 0.067, 0.033, 2, 0.01), side * 0.034, -0.006, 0.009);
+  add(new RoundedBoxGeometry(0.033, 0.034, 0.031, 1, 0.007), side * 0.031, -0.048, 0.019);
+  for (let i = 0; i < 4; i++) {
+    const y = 0.022 - i * 0.018;
+    add(new THREE.CapsuleGeometry(0.008, 0.036 - i * 0.002, 2, 8), 0.004 * side, y, -0.014, 0, 0, Math.PI / 2);
+    add(new RoundedBoxGeometry(0.014, 0.019, 0.032, 1, 0.0045), -side * 0.022, y, 0.002);
+  }
+  add(new THREE.CapsuleGeometry(0.01, 0.032, 2, 8), side * 0.015, 0.031, 0.021, -0.5, 0, side * 0.8);
+  add(new RoundedBoxGeometry(0.018, 0.027, 0.024, 1, 0.006), -side * 0.003, 0.02, 0.018);
+  const geo = mergeGeometries(pieces, false);
+  for (const g of pieces) g.dispose();
+  return geo;
+}
 
 export class ViewModel {
   constructor(scene, T, team) {
@@ -51,25 +76,20 @@ export class ViewModel {
     scene.add(this.muzzleLight);
     // 手臂
     const m = gunMaterials();
-    this.gloveMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.62, metalness: 0.05, normalMap: m.black.normalMap, normalScale: new THREE.Vector2(0.5, 0.5) });
+    this.gloveMat = new THREE.MeshStandardMaterial({ color: 0x292d31, roughness: 0.82, metalness: 0.02, normalMap: m.black.normalMap, normalScale: new THREE.Vector2(0.18, 0.18) });
     this.sleeveMat = new THREE.MeshStandardMaterial({ color: 0x222326, roughness: 0.9, metalness: 0, normalMap: m.black.normalMap, normalScale: new THREE.Vector2(0.8, 0.8) });
     this.cuffMat = new THREE.MeshStandardMaterial({ color: 0xb01c1c, roughness: 0.8 });
     this.arms = {};
     for (const s of ['R', 'L']) {
       const g = new THREE.Group();
-      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.037, 0.3, 4, 12), this.sleeveMat);
-      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.022, 12), this.cuffMat);
+      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.3, 4, 12), this.sleeveMat);
+      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.014, 12), this.cuffMat);
       const hand = new THREE.Group();
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.085, 0.045), this.gloveMat);
-      const fingers = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.07), this.gloveMat);
-      fingers.position.set(0, -0.035, -0.03);
-      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.013, 0.04, 3, 6), this.gloveMat);
-      thumb.position.set(s === 'R' ? -0.035 : 0.035, 0.01, -0.03); thumb.rotation.x = -1.1;
-      hand.add(palm, fingers, thumb);
+      const glove = new THREE.Mesh(gloveGeometry(s === 'R' ? 1 : -1), this.gloveMat);
+      hand.add(glove);
       g.add(fore, cuff, hand);
-      cuff.visible = false;
       this.rig.add(g);
-      this.arms[s] = { g, fore, cuff, hand };
+      this.arms[s] = { g, fore, cuff, hand, glove };
     }
     this.elbow = { R: new THREE.Vector3(0.5, -0.44, -0.3), L: new THREE.Vector3(-0.04, -0.5, -0.5) };
     // 枪口火焰
@@ -110,7 +130,7 @@ export class ViewModel {
   setTeam(team) {
     this.team = team;
     this.sleeveMat.color.set(team === 'GR' ? 0x3b4757 : 0x222326);
-    this.cuffMat.color.set(team === 'GR' ? 0x1f62c8 : 0xa81818);
+    this.cuffMat.color.set(team === 'GR' ? 0x263c57 : 0x3c292b);
   }
   equip(id, drawTime) {
     if (!this.guns[id]) {
@@ -157,7 +177,7 @@ export class ViewModel {
     s.w.set(Math.random() * 20, Math.random() * 20, Math.random() * 20);
     s.mesh.rotation.set(0, Math.random(), 0);
   }
-  reload(dur, empty) { this.anim = { type: 'reload', t: 0, dur, empty }; }
+  reload(dur, empty) { this.resetParts(); this.slideT = 0; this.anim = { type: 'reload', t: 0, dur, empty }; }
   melee(heavy) { this.anim = { type: heavy ? 'stab' : 'slash', t: 0, dur: heavy ? 0.85 : 0.38, dir: Math.random() > 0.5 ? 1 : -1 }; }
   throwNade() { this.anim = { type: 'throw', t: 0, dur: 0.75 }; }
   inspect() { if (!this.anim) this.anim = { type: 'inspect', t: 0, dur: 2.6 }; }
@@ -196,8 +216,9 @@ export class ViewModel {
     let rx = hip.r[0] + this.kickRot - dr * 0.9 + this.sway.y * 1.5, ry = hip.r[1] + this.sway.x * 2, rz = hip.r[2] + (st.crouch ? -0.03 : 0) + bx * 2;
     // 特殊动作
     const P = this.parts, R = this.partRest;
-    let handL = null; // 左手目标（相机空间）
-    let handROverride = null;
+    // 先记录局部手位，等本帧枪身姿态更新后再解析，避免手比弹匣/枪栓迟一帧。
+    let handLTarget = null, handRTarget = null;
+    const handTarget = (part, x, y, z, weight) => ({ part, offset: new THREE.Vector3(x, y, z), weight });
     if (this.slideT > 0 && P.slide) {
       // 滑套后坐（有 slide 部件即适用），结束时精确归位
       this.slideT = Math.max(0, this.slideT - dt);
@@ -209,56 +230,60 @@ export class ViewModel {
       const f = Math.min(1, a.t / a.dur);
       if (a.type === 'reload') {
         const tilt = ease(seg(f, 0, 0.15)) * (1 - ease(seg(f, 0.85, 1)));
-        rz += tilt * 0.45; rx += tilt * 0.18; py -= tilt * 0.03; px -= tilt * 0.02;
+        rz += tilt * 0.45; rx += tilt * 0.18; py += tilt * 0.055; px -= tilt * 0.02;
         if (P.mag) {
           const out = ease(seg(f, 0.15, 0.3)), gone = seg(f, 0.3, 0.42), back = ease(seg(f, 0.42, 0.62)), seat = seg(f, 0.62, 0.7);
           const mp = R.mag.p;
           if (f < 0.3) { P.mag.position.set(mp.x, mp.y - out * 0.12, mp.z + out * 0.02); P.mag.visible = true; }
           else if (f < 0.42) { P.mag.position.set(mp.x, mp.y - 0.12 - gone * 0.4, mp.z); P.mag.visible = gone < 0.95; }
-          else { P.mag.visible = true; P.mag.position.set(mp.x, mp.y - (1 - back) * 0.3 - (1 - seat) * 0.015, mp.z + (1 - back) * 0.05); }
-          const mw = new THREE.Vector3(); P.mag.getWorldPosition(mw); mw.y -= 0.06;
-          if (f > 0.12 && f < 0.72) handL = mw;
+          else { P.mag.visible = true; P.mag.position.set(mp.x, mp.y - (1 - back) * 0.2 - (1 - seat) * 0.015, mp.z + (1 - back) * 0.025); }
+          const reach = ease(seg(f, 0.1, 0.17)) * (1 - ease(seg(f, 0.68, 0.78)));
+          if (reach > 0) handLTarget = P.reloadGrip
+            ? handTarget(P.reloadGrip, 0, 0, 0, reach)
+            : handTarget(P.mag, 0, -0.055, 0.01, reach);
           if (f > 0.62 && f < 0.7) { this.kickRot -= dt * 0.8; }
         }
         if (a.empty && P.bolt && f > 0.74 && f < 0.92) {
           const bf = seg(f, 0.74, 0.92), pull = Math.sin(bf * Math.PI);
           P.bolt.position.z = R.bolt.p.z + pull * 0.07;
-          const bw = new THREE.Vector3(); P.bolt.getWorldPosition(bw);
-          if (id === 'ak47' || id === 'awm') handROverride = null; else handL = bw;
-          if (id === 'ak47') handL = bw;
+          const target = handTarget(P.boltGrip || P.boltHandle || P.bolt, 0, 0, 0, pull);
+          if (id === 'awm') handRTarget = target;
+          else handLTarget = target;
           rz -= pull * 0.1;
         } else if (P.bolt && R.bolt) P.bolt.position.z = R.bolt.p.z;
         // 空仓换弹末尾释放套筒：按能力判断（有 slide 部件 + 空仓），行程按类别取
-        if (P.slide && a.empty && f > 0.8 && f < 0.9) {
-          P.slide.position.z = R.slide.p.z + pick(SLIDE_RELEASE, id, 0.03);
-          P.slide.updateWorldMatrix(true, false);
-          handL = P.slide.getWorldPosition(new THREE.Vector3()); // 左手跟到套筒
+        if (P.slide && a.empty) {
+          P.slide.position.z = R.slide.p.z + pick(SLIDE_RELEASE, id, 0.03) * (1 - ease(seg(f, 0.82, 0.91)));
+          const reach = ease(seg(f, 0.75, 0.8)) * (1 - ease(seg(f, 0.89, 0.95)));
+          if (reach > 0) handLTarget = handTarget(P.slide, -0.024, 0.065, 0.01, reach);
         }
       } else if (a.type === 'bolt' && P.bolt) {
         const f2 = seg(f, 0.15, 0.85);
         const up = ease(seg(f2, 0, 0.2)) * (1 - ease(seg(f2, 0.8, 1)));
         const backK = ease(seg(f2, 0.2, 0.45)) * (1 - ease(seg(f2, 0.55, 0.8)));
-        P.bolt.rotation.z = up * 1.2; P.bolt.position.z = R.bolt.p.z + backK * 0.09;
+        P.bolt.rotation.z = R.bolt.r.z + up * 1.2; P.bolt.position.z = R.bolt.p.z + backK * 0.09;
         rz += Math.sin(f2 * Math.PI) * 0.18; rx += Math.sin(f2 * Math.PI) * 0.06; py -= Math.sin(f2 * Math.PI) * 0.015;
-        const bw = new THREE.Vector3(); P.bolt.children[1]?.getWorldPosition(bw);
-        if (f2 > 0 && f2 < 1) handROverride = bw;
+        const reach = ease(seg(f2, 0, 0.12)) * (1 - ease(seg(f2, 0.86, 1)));
+        if (reach > 0) handRTarget = handTarget(P.boltGrip || P.boltHandle || P.bolt, 0, 0, 0, reach);
         if (backK > 0.5 && !a.ejected) { a.ejected = true; this.ejectShell(); }
       } else if (a.type === 'slash') {
         const s = Math.sin(f * Math.PI), dir = a.dir;
-        ry += dir * (f - 0.5) * -2.2; rz += dir * s * -0.6; px += dir * (0.5 - f) * 0.12; pz -= s * 0.08; rx += s * 0.3;
+        ry -= dir * s * 1.1; rz += dir * s * -0.6; px += dir * Math.sin(f * Math.PI * 2) * 0.06; pz -= s * 0.08; rx += s * 0.3;
       } else if (a.type === 'stab') {
         const wind = ease(seg(f, 0, 0.35)), thrust = ease(seg(f, 0.35, 0.55)), ret = ease(seg(f, 0.65, 1));
-        pz += wind * 0.08 - thrust * 0.22 + ret * 0.14; rx += wind * -0.4 + thrust * 0.9 - ret * 0.5; py += wind * 0.05 - thrust * 0.04;
+        pz += wind * 0.08 - thrust * 0.22 + ret * 0.14; rx += wind * -0.4 + thrust * 0.9 - ret * 0.5; py += wind * 0.05 - thrust * 0.04 - ret * 0.01;
       } else if (a.type === 'throw') {
         const pin = seg(f, 0, 0.3), wind = ease(seg(f, 0.3, 0.55)), thr = ease(seg(f, 0.55, 0.8));
         if (P.pin) { P.pin.visible = pin < 0.6; }
-        if (pin < 1) handL = this.cur.localToWorld(new THREE.Vector3(0.03, 0.06, 0));
+        if (pin < 1) handLTarget = handTarget(this.cur, 0.03, 0.06, 0, 1 - ease(seg(pin, 0.7, 1)));
         py += wind * 0.08 - thr * 0.12; pz += wind * 0.1 - thr * 0.3; rx += wind * 0.8 - thr * 1.6;
         if (f > 0.72) this.cur.visible = false;
       } else if (a.type === 'inspect') {
         const s1 = ease(seg(f, 0, 0.25)) * (1 - ease(seg(f, 0.8, 1)));
         const s2 = ease(seg(f, 0.4, 0.6)) * (1 - ease(seg(f, 0.8, 1)));
-        ry += s1 * 0.9 - s2 * 1.1; rz += s1 * 0.5; px -= s1 * 0.08; py += s1 * 0.04; rx += s2 * 0.3;
+        if (id === 'knife') {
+          ry -= s1 * 0.25 - s2 * 0.35; rz += s1 * 0.28; px -= s1 * 0.1; py += s1 * 0.03; rx += s2 * 0.15;
+        } else { ry += s1 * 0.9 - s2 * 1.1; rz += s1 * 0.5; px -= s1 * 0.08; py += s1 * 0.04; rx += s2 * 0.3; }
       }
       if (f >= 1) { this.anim = null; this.resetParts(); if (a.type === 'throw') this.cur.visible = false; }
     }
@@ -268,9 +293,10 @@ export class ViewModel {
     // 手臂 IK（简化：前臂从固定肘点指向手）
     const gp = P.grip ? P.grip.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(px, py, pz);
     const fp = P.fore ? P.fore.getWorldPosition(new THREE.Vector3()) : null;
-    this.placeArm('R', handROverride || gp, true);
-    if (id === 'knife') this.arms.L.g.visible = false;
-    else { this.arms.L.g.visible = true; this.placeArm('L', handL || fp || gp, false); }
+    const resolveHand = (base, target) => target ? base.clone().lerp(target.part.localToWorld(target.offset), target.weight) : base;
+    this.placeArm('R', resolveHand(gp, handRTarget), true);
+    if (id === 'knife' || (id === 'he' && !handLTarget)) this.arms.L.g.visible = false;
+    else { this.arms.L.g.visible = true; this.placeArm('L', resolveHand(fp || gp, handLTarget), false); }
     // 枪口火焰
     if (this.flashT > 0) {
       this.flashT -= dt;
@@ -294,22 +320,27 @@ export class ViewModel {
   }
   placeArm(s, handPos, right) {
     const A = this.arms[s];
+    A.hand.position.copy(handPos);
+    A.hand.quaternion.copy(this.holder.quaternion);
+    A.hand.rotateX(right ? -0.24 : 0.22);
+    const broadSupport = !right && ['rifle', 'smg', 'sniper'].includes(wtype(this.id));
+    const cup = right && this.id === 'he';
+    A.glove.scale.x = cup ? 1.22 : broadSupport ? 1.18 : 1;
+    A.glove.position.x = cup ? 0.009 : broadSupport ? -0.006 : 0;
+    A.hand.updateWorldMatrix(true, false);
+    const wristX = (right ? 0.031 : -0.031) * A.glove.scale.x + A.glove.position.x;
+    const wrist = A.hand.localToWorld(new THREE.Vector3(wristX, -0.048, 0.019));
     const E = this.elbow[s].clone();
     const hp = (HIP[this.id] || HIP.ak47).p;
     E.x += (this.holder.position.x - hp[0]) * 0.6; E.y += (this.holder.position.y - hp[1]) * 0.6; E.z += (this.holder.position.z - hp[2]) * 0.5;
     if (s === 'L' && wtype(this.id) === 'pistol') E.set(0.0, -0.46, -0.3); // 手枪：左手托握肘位更靠内
-    const dir = handPos.clone().sub(E);
+    const dir = wrist.clone().sub(E);
     const L = dir.length(); dir.normalize();
-    const back = handPos.clone().addScaledVector(dir, -0.05);
-    const mid = E.clone().add(back).multiplyScalar(0.5);
+    const mid = E.clone().add(wrist).multiplyScalar(0.5);
     A.fore.position.copy(mid);
     A.fore.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    A.fore.scale.set(1, Math.max(0.2, (L - 0.05) / 0.39), 1);
-    A.cuff.position.copy(handPos).addScaledVector(dir, -0.075);
+    A.fore.scale.set(1, Math.max(0.2, L / 0.364), 1);
+    A.cuff.position.copy(wrist).addScaledVector(dir, -0.014);
     A.cuff.quaternion.copy(A.fore.quaternion);
-    A.hand.position.copy(handPos);
-    // 手掌朝向：沿前臂方向，右手握把稍向前倾
-    A.hand.quaternion.copy(this.holder.quaternion);
-    if (right) A.hand.rotateX(-0.35); else A.hand.rotateX(0.3);
   }
 }

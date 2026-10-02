@@ -1,12 +1,14 @@
 # 爆破接入说明
 
-当前可玩地图是通用爆破测试场。CF 沙漠灰的路线、尺寸、出生区、包点和高低差尚未核定，不得把测试场改名后当作地图还原交付。
+当前默认地图为“沙城”（`desert-gray`），是 Yang 批准的沙漠灰风格原创单层布局。通用 `bomb-test` 独立保留作回归场景；沙城不代表官方地图或引用对话图片的精确复刻。
 
 ## 模块与入口
 
-- `Game.showBombSetup()`、`showSelectedSetup()` 负责设置路径；`startSelectedMatch()` 按主页选择启动，`restartMatch()` 保留当前比赛模式。`startBombMatch(options = {})` 创建规则和角色，可覆盖规则默认值用于测试；`startTeamMatch()` 保留团队规则。主页 `selectedMode` 表示待进入模式，`mode` 表示当前比赛模式。
+- `Game.showBombSetup()`、`showSelectedSetup()` 负责设置路径；`startSelectedMatch()` 按主页选择启动，`restartMatch()` 保留当前比赛模式及地图。`startBombMatch(options = {})` 创建规则和角色，可覆盖规则默认值用于测试；`mapId` 在 Game 层拆出，不传给规则。`startTeamMatch()` 保留团队规则。主页 `selectedMode` 表示待进入模式，`mode` 表示当前比赛模式。
 - `bomb-rules.js` 是纯逻辑，`BOMB_DEFAULTS` 是实际运行默认值，单元测试逐字段比对 `design-data.json.bombDefaults`。修改默认参数时同步二者并运行设计计算脚本。
-- `bomb-map.js` 的 `buildBombMap(scene, T, world)` 返回地图配置；`Game.loadMap(mode)` 管理场景根节点、碰撞、导航、雷达与环境切换。地图独占资源由 `dispose()` 释放，运输船的自有甲板 AO 声明在 `ownedTextures` 中，借用纹理不释放。
+- `desert-layout.js` 是沙城实体、装饰、出生、包点与路线数据入口，`desert-map.js` 的 `buildDesertMap(scene, T, world)` 生成场景；`bomb-map.js` 的 `buildBombMap()` 保留旧测试场。`map-catalog.js` 集中菜单名称与默认地图。
+- `Game.loadMap(mode)` 管理场景根节点、碰撞、导航、雷达与环境切换。地图独占资源由 `dispose()` 释放，运输船的自有甲板 AO 声明在 `ownedTextures` 中，借用纹理不释放。`Environment.setMapKind(kind, shadowBounds)` 接收当前地图阴影范围，切回旧图时使用其默认值。
+- 沙城是默认值；内部回归可用 URL `?bombMap=bomb-test` 或 `game.startBombMatch({ mapId: 'bomb-test' })`。非法地图 ID 回落到默认值，重新开局及团队模式切回爆破保留已选 ID。
 - `bomb-visual.js` 持有复用的世界与第一人称 C4 模型，任务物品不进入 `WEAPONS` 或四槽背包。
 - `bomb-tactics.js` 管理公开任务，`Game.getBombTask(bot)` 返回 `{ goal, lookAt?, interact?, siteId?, urgent }`；`lookAt` 为静态地图入口方向。守点位置按导航和碰撞校验、彼此分开，缓存按规则实例与回合重置。
 - 拾包、拆包按实际路径长度选机器人，负责人保持到死亡或 `reportBombTaskBlocked(bot, task)` 报告阻塞。阻塞者短暂退出候选，玩家仅站在附近不占任务；玩家正在安拆时机器人掩护。换边时阵营身份不变，任务根据 `attackTeam` 重建。
@@ -17,8 +19,8 @@
 
 ```js
 {
-  id: 'bomb-test',
-  name: '爆破测试场',
+  id: 'desert-gray',
+  name: '沙城',
   spawns: {
     attack: [{ x, y, z, yaw }],
     defend: [{ x, y, z, yaw }],
@@ -26,6 +28,7 @@
   sites: [{ id: 'A', label: 'A区', x, y, z, radius }],
   navBounds: [minX, minZ, maxX, maxZ],
   radarBounds: { minX, minZ, maxX, maxZ },
+  shadowBounds: [[minX, maxX], [minY, maxY], [minZ, maxZ]],
   spectator: { x, y, z, lookX, lookY, lookZ },
   lampSpots: [],
   funnelTop: null,
@@ -34,7 +37,9 @@
 }
 ```
 
-出生按攻守角色取点，队伍身份 BL/GR 与比分不随换边改变。渲染实体与碰撞来自同一配置；导航和雷达使用当前地图边界。现有 `NavGrid` 为单层网格，仅满足测试场，真实沙漠灰若有多层路线，须实现高度和连接关系后再验收。
+出生按攻守角色取点，队伍身份 BL/GR 与比分不随换边改变。渲染实体与碰撞来自同一配置；导航和雷达使用当前地图边界。沙城与测试场都是连续地面的单层路线，当前 `NavGrid` 不负责跳箱或跨层拾包。未来若引入必经楼梯或上下重叠通道，须实现高度和连接关系后再验收。
+
+`tools/describe-desert-map.mjs` 从实际地图的 World/NavGrid 生成 `docs/desert-layout.svg` 与 `docs/desert-metrics.json`，路线图与统计不维护独立坐标。修改布局后重新运行此脚本。
 
 ## 时钟与同刻事件
 
@@ -58,4 +63,4 @@ HUD 的 `update(dt, state)` 读取 `state.bomb`（回合、身份、目标、进
 
 ## 验证命令
 
-运行 `npm test`、`npm run build`，启动 README 的本地静态服务，然后运行 `node tools/verify-game.mjs`、`node tools/verify-bomb.mjs` 与 `node tools/verify-hud-bots.mjs`。截图输出在 `tools/shots/`，不提交；脚本输出当前通过数、回合原因与资源测量，验收记录写入 `game-design.md`。
+运行 `npm test`、`npm run build`，启动 README 的本地静态服务，然后运行 `node tools/verify-game.mjs`、`node tools/verify-bomb.mjs`、`node tools/verify-hud-bots.mjs` 与 `node tools/verify-desert.mjs`。旧爆破与 HUD 脚本显式使用测试场坐标，新地图入口、A/B 安包、人机和资源由 desert 脚本覆盖。截图输出在 `tools/shots/`，不提交；脚本输出当前通过数、回合原因与资源测量，验收记录写入 `game-design.md`。

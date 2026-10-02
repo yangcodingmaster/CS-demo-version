@@ -1,5 +1,6 @@
 // HUD 与菜单（DOM）
 import { WEAPONS } from './weapons.js';
+import { bombMapInfo } from './map-catalog.js';
 
 const TEAM_CN = { BL: '潜伏者', GR: '保卫者' };
 const $ = (s, r = document) => r.querySelector(s);
@@ -87,11 +88,12 @@ export class HUD {
   }
   syncModeMenu() {
     const bomb = this.g.selectedMode === 'bomb';
+    const map = bombMapInfo(this.g.bombMapId);
     const e = this.el;
     e.setupLogo.textContent = `CROSSFIRE · ${bomb ? '爆破模式' : '团队竞技'}`;
-    e.setupTitle.textContent = bomb ? '爆破测试场' : '运输船设置';
-    e.setupEn.textContent = bomb ? 'BOMB TEST ARENA' : 'TRANSPORT SHIP';
-    if (bomb) e.setupDesc.textContent = '在通用 A/B 测试场进行 5v5 爆破对局。潜伏者首轮进攻，保卫者首轮防守；完成第 4 回合后交换攻守，队伍与累计得分保持不变。CF 沙漠灰参考尚未提供，当前场景用于验证爆破玩法。';
+    e.setupTitle.textContent = bomb ? map.name : '运输船设置';
+    e.setupEn.textContent = bomb ? map.english : 'TRANSPORT SHIP';
+    if (bomb) e.setupDesc.textContent = `${map.description} 5v5 回合对局，潜伏者首轮进攻，保卫者首轮防守；完成第 4 回合后交换攻守，队伍与累计得分保持不变。`;
     else e.setupDesc.innerHTML = this.teamSetupDesc;
     e.teamRules.classList.toggle('hidden', bomb);
     e.bombRules.classList.toggle('hidden', !bomb);
@@ -102,7 +104,7 @@ export class HUD {
         ? `Black List${bomb ? ' · 首轮进攻' : ''}`
         : `Global Risk${bomb ? ' · 首轮防守' : ''}`;
     }
-    e.loadingTitle.textContent = bomb ? '爆破测试场' : '运 输 船';
+    e.loadingTitle.textContent = bomb ? map.name : '运 输 船';
     e.loadingTip.textContent = bomb ? '携包者按 5 选择 C4，再按住 E 安包；守方按住 E 拆包。阵亡后等待下一回合。' : '小提示：蹲下再跳（蹲跳）可以跳得更高，踩着木箱就能爬上对面集装箱的二楼。';
   }
   show(name, opts = {}) {
@@ -255,7 +257,7 @@ export class HUD {
     e.hud.classList.toggle('bomb-mode', !!bomb);
     e.bombHud.classList.toggle('hidden', !bomb);
     e.bombAction.classList.toggle('hidden', !bomb || !s.alive || (!bomb.hint && !bomb.interaction));
-    e.radarLabel.textContent = bomb ? '爆破测试场' : '运输船';
+    e.radarLabel.textContent = this.g.map?.name || '运输船';
     if (!bomb) return;
     const attack = bomb.attackTeam === s.myTeam;
     e.bombPhase.textContent = BOMB_PHASE_CN[bomb.phase] || bomb.phase;
@@ -318,7 +320,7 @@ export class HUD {
   scoreboard(show, actors, myId, score) {
     this.el.board.classList.toggle('hidden', !show);
     if (!show) return;
-    this.el.boardTitle.textContent = this.g.mode === 'bomb' ? '爆破测试场 · 回合比分' : '运输船 · 团队竞技';
+    this.el.boardTitle.textContent = `${this.g.map?.name || '运输船'} · ${this.g.mode === 'bomb' ? '回合比分' : '团队竞技'}`;
     const rows = (team) => actors.filter((a) => a.team === team).sort((a, b) => b.stats.k - a.stats.k || a.stats.d - b.stats.d)
       .map((a) => `<tr class="${a.id === myId ? 'me' : ''} ${a.alive ? '' : 'dead'}"><td>${esc(a.name)}</td><td>${a.stats.k}</td><td>${a.stats.d}</td><td>${a.stats.hs}</td><td>${a.ping}</td></tr>`).join('');
     const tbl = (team) => `<table class="t${team}"><tr><th class="team">${TEAM_CN[team]} · ${score[team]}</th><th>击杀</th><th>死亡</th><th>爆头</th><th>延迟</th></tr>${rows(team)}</table>`;

@@ -234,8 +234,9 @@ export class Environment {
     this.mapKind = 'ship';
     this.apply('day');
   }
-  setMapKind(kind) {
+  setMapKind(kind, shadowBounds = null) {
     this.mapKind = kind === 'ship' ? 'ship' : 'land';
+    this.mapShadowBounds = shadowBounds;
     this.ocean.visible = this.mapKind === 'ship';
     this.shipSpeed = this.mapKind === 'ship' ? 6.5 : 0;
     this.shipDist = 0;
@@ -251,15 +252,15 @@ export class Environment {
     u.sunPosition.value.copy(this.sunDir);
     this.sun.color.set(P.sunColor); this.sun.intensity = P.sunInt;
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 120);
-    // 根据地图边界调整阴影，陆地测试场不沿用运输船的窄船身范围。
+    // 根据当前地图范围计算阴影，兼容不同大小的陆地场景。
     const cam = this.sun.shadow.camera;
     const lightM = new THREE.Matrix4().lookAt(this.sun.position, this.sun.target.position, new THREE.Vector3(0, 1, 0));
     const inv = lightM.clone().invert();
     const box = new THREE.Box3();
     const pts = [];
-    const shadowBounds = this.mapKind === 'ship'
+    const shadowBounds = this.mapShadowBounds || (this.mapKind === 'ship'
       ? [[-58, 40], [-1, 26], [-15, 15]]
-      : [[-32, 32], [-1, 10], [-25, 25]];
+      : [[-32, 32], [-1, 10], [-25, 25]]);
     for (const x of shadowBounds[0]) for (const y of shadowBounds[1]) for (const z of shadowBounds[2]) pts.push(new THREE.Vector3(x, y, z));
     const lp = new THREE.Vector3();
     for (const p of pts) { lp.copy(p).sub(this.sun.position).applyMatrix4(inv); box.expandByPoint(lp); }
