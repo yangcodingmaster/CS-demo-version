@@ -25,4 +25,5 @@ python3 -m http.server 8000 --bind 127.0.0.1 --directory dist
 
 - 改动后先构建；网页改动按范围检查桌面和触屏布局，至少验证主菜单和进入对局。
 - 项目介绍、操作和本地运行见 `README.md`；玩法代码入口为 `cf-transport-ship/src/main.js` 与 `src/game.js`。
+- 游戏新功能按 `cf-transport-ship/AGENTS.md` 与 `cf-transport-ship/docs/game-design.md` 的阶段、分工和验收执行；这些规划不能视为已实现。
 - `origin` 指向 Yang 的 fork，`upstream` 指向原仓库，仅用于获取原作者更新。

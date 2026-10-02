@@ -1,0 +1,25 @@
+{
+  "backpackCount": 3,
+  "slotCountPerBackpack": 4,
+  "equipmentTotal": 11,
+  "equipmentByCategory": {
+    "primary": 4,
+    "secondary": 3,
+    "melee": 1,
+    "throwable": 3
+  },
+  "existingEquipment": 7,
+  "plannedEquipment": 4,
+  "participants": 10,
+  "bots": 9,
+  "activeRoundUpperSeconds": 130,
+  "matchUpperSecondsExcludingPauseAndMenus": 1136,
+  "matchUpperMinutes": 18,
+  "matchUpperRemainingSeconds": 56,
+  "formulas": {
+    "participants": "teamSize * 2",
+    "bots": "participants - humanPlayers",
+    "activeRoundUpperSeconds": "roundSeconds + bombSeconds",
+    "matchUpperSeconds": "maxRounds * (preparationSeconds + activeRoundUpperSeconds + resultSeconds)"
+  }
+}

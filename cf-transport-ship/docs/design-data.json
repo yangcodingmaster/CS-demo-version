@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "documentStatus": "implementation_specification_not_runtime_config",
+  "confirmedMapId": "desert_gray",
+  "confirmedMapName": "CF 沙漠灰",
+  "mapReferenceStatus": "awaiting_user_reference",
+  "weaponStyle": "现有程序化简化 3D，精修比例、材质和动作",
+  "backpackCount": 3,
+  "slots": [
+    "primary",
+    "secondary",
+    "melee",
+    "throwable"
+  ],
+  "throwablesPerBackpack": 1,
+  "defaultPrimaryIds": [
+    "ak47",
+    "m4a1",
+    "awm"
+  ],
+  "defaultSecondaryId": "deagle",
+  "defaultMeleeId": "knife",
+  "defaultThrowableId": "he",
+  "equipment": [
+    {
+      "id": "ak47",
+      "name": "AK-47",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "深灰金属、暖棕木质护木与枪托，保留弯弹匣轮廓"
+    },
+    {
+      "id": "m4a1",
+      "name": "M4A1",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "哑光黑灰枪身、金属枪管与导轨，突出直线结构"
+    },
+    {
+      "id": "awm",
+      "name": "AWM",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "低饱和橄榄绿枪托、深色枪管与瞄准镜，保留拉栓结构"
+    },
+    {
+      "id": "mp5",
+      "name": "MP5",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "紧凑黑灰轮廓、短枪管与弯弹匣，聚合物与金属分层"
+    },
+    {
+      "id": "deagle",
+      "name": "沙漠之鹰",
+      "category": "secondary",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "宽厚银灰套筒、黑色握把，克制的钢件高光"
+    },
+    {
+      "id": "usp",
+      "name": "USP",
+      "category": "secondary",
+      "availability": "planned",
+      "deliveryStage": "M1B",
+      "visualDirection": "无消音器的黑灰标准手枪，细长套筒、独立扳机护圈与握把"
+    },
+    {
+      "id": "glock18",
+      "name": "Glock-18",
+      "category": "secondary",
+      "availability": "planned",
+      "deliveryStage": "M1B",
+      "visualDirection": "短方套筒与深色聚合物握把，轮廓区别于 USP 和沙漠之鹰"
+    },
+    {
+      "id": "knife",
+      "name": "军刀",
+      "category": "melee",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "深色粗糙握把、低饱和钢色刀刃和清楚的刃口"
+    },
+    {
+      "id": "he",
+      "name": "高爆手雷",
+      "category": "throwable",
+      "availability": "existing",
+      "deliveryStage": "M1",
+      "visualDirection": "低饱和橄榄绿弹体、金属保险装置，保留现有轮廓"
+    },
+    {
+      "id": "flash",
+      "name": "闪光弹",
+      "category": "throwable",
+      "availability": "planned",
+      "deliveryStage": "M3",
+      "visualDirection": "浅灰紧凑罐体与少量识别色，形状可与高爆和烟雾区分"
+    },
+    {
+      "id": "smoke",
+      "name": "烟雾弹",
+      "category": "throwable",
+      "availability": "planned",
+      "deliveryStage": "M3",
+      "visualDirection": "灰绿罐体与少量识别色，使用程序化烟雾效果"
+    }
+  ],
+  "bombDefaults": {
+    "status": "project_design_defaults_not_original_cs_values",
+    "teamSize": 5,
+    "humanPlayers": 1,
+    "maxRounds": 8,
+    "roundsBeforeSideSwap": 4,
+    "roundsToWin": 5,
+    "drawAtRoundLimit": true,
+    "overtime": false,
+    "preparationSeconds": 8,
+    "roundSeconds": 90,
+    "bombSeconds": 40,
+    "plantSeconds": 3,
+    "defuseSeconds": 5,
+    "resultSeconds": 4,
+    "friendlyFire": false,
+    "selfGrenadeDamage": true,
+    "economy": false,
+    "weaponPickups": false,
+    "respawnWithinRound": false,
+    "healthAtRoundStart": 100,
+    "armorAtRoundStart": 100,
+    "protectionSecondsAfterPreparation": 0,
+    "interactionKey": "KeyE",
+    "bombSlotKey": "Digit5",
+    "defuseMaxDistanceMeters": 2,
+    "pickupMaxDistanceMeters": 1.5,
+    "damageCancelsInteraction": false,
+    "deadlineWinsExactTie": true
+  },
+  "tacticalThrowableDefaults": {
+    "status": "project_design_defaults_to_playtest_after_functional_delivery",
+    "flashFuseSeconds": 2,
+    "flashMaxRangeMeters": 20,
+    "flashFullEffectRangeMeters": 5,
+    "flashMaxBlindSeconds": 2,
+    "flashFadeSeconds": 1,
+    "smokeFuseSeconds": 2,
+    "smokeRadiusMeters": 4,
+    "smokeDurationSeconds": 12,
+    "smokeFadeSeconds": 1,
+    "affectsAllTeams": true
+  }
+}

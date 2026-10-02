@@ -50,6 +50,12 @@ AGENTS.md               开发边界与验证约定
 
 `node_modules/` 和 `dist/` 不提交到 Git。
 
+## 开发规划
+
+主页、武器库与三背包、CF 沙漠灰爆破、枪械精修和新增装备的已确认方向及分阶段验收，见 [游戏开发规格](cf-transport-ship/docs/game-design.md)。这是待实施的规划，不代表功能已经上线。
+
+交给开发 Agent 时，从 [CF 开发协作说明](cf-transport-ship/AGENTS.md) 开始；装备与项目默认参数见 [设计数据](cf-transport-ship/docs/design-data.json)。
+
 ## 原始来源
 
 - 本仓库：[yangcodingmaster/CS-demo-version](https://github.com/yangcodingmaster/CS-demo-version)。
