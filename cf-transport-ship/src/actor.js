@@ -9,7 +9,7 @@ const GRAV = 19, JUMP_V = 6.6, RUN = 5.7;
 export class Actor {
   constructor(game, { id, name, team, isPlayer = false }) {
     this.game = game; this.id = id; this.name = name; this.team = team; this.isPlayer = isPlayer;
-    this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3();
+    this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.speed = 0;
     this.radius = 0.36; this.height = STAND_H; this.stepHeight = 0.42;
     this.onGround = false; this.crouch = false; this.eyeH = EYE_STAND;
     this.yaw = 0; this.pitch = 0; this.punchP = 0; this.punchY = 0; this.aimPunch = 0;
@@ -53,7 +53,7 @@ export class Actor {
     this.soldier.setWeapon(this.loadout.primary);
   }
   spawn(sp) {
-    this.pos.set(sp.x, (sp.y || 0) + 0.02, sp.z); this.vel.set(0, 0, 0);
+    this.pos.set(sp.x, (sp.y || 0) + 0.02, sp.z); this.vel.set(0, 0, 0); this.speed = 0;
     this.yaw = sp.yaw; this.pitch = 0; this.punchP = this.punchY = 0;
     this.hp = 100; this.armor = 100; this.alive = true; this.deadT = 0;
     this.crouch = false; this.height = STAND_H; this.eyeH = EYE_STAND;

@@ -19,6 +19,7 @@ import { Screens } from './screens.js';
 import { buildBombMap } from './bomb-map.js';
 import { BombRules } from './bomb-rules.js';
 import { BombVisual } from './bomb-visual.js';
+import { BombTactics, shouldCommitObjective } from './bomb-tactics.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const MULTI = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'MULTI KILL', 'ULTRA KILL', 'RAMPAGE', 'UNSTOPPABLE', 'GODLIKE'];
@@ -186,6 +187,7 @@ export class Game {
     audio.init(); audio.setVolumes({ master: o.vol }); audio.startAmbient(); audio.playUI('start');
     this.clearMatchObjects();
     this.loadMap(this.mode);
+    this.bombTactics = this.bomb ? new BombTactics(this) : null;
     this.fx.clear();
     this.bombVisual.reset();
     this.timers = [];
@@ -523,36 +525,21 @@ export class Game {
     this.updateObjective(a, held);
   }
   getBombTask(a) {
-    if (!this.bomb?.active || !a.alive) return null;
-    const B = this.bomb, sites = this.map.sites;
-    const nearest = (team, p) => this.actors.filter((x) => x.alive && x.team === team)
-      .sort((x, y) => x.pos.distanceToSquared(p) - y.pos.distanceToSquared(p) || x.id - y.id)[0];
-    const chosen = sites[(B.round + 1) % sites.length];
-    if (a.team === B.attackTeam) {
-      if (B.bomb.state === 'dropped') {
-        const pos = new THREE.Vector3().copy(B.bomb.position);
-        if (nearest(a.team, pos) === a) return { goal: B.bomb.position, interact: 'pickup' };
-      }
-      if (B.carrierId === a.id) return { goal: chosen, interact: 'plant', siteId: chosen.id };
-      const site = B.bomb.state === 'planted' ? sites.find((s) => s.id === B.bomb.siteId) : chosen;
-      const offset = (a.id % 2 ? -1 : 1) * (2 + a.id % 3);
-      return { goal: { x: site.x - 4, y: site.y, z: site.z + offset } };
-    }
-    if (B.phase === 'planted') {
-      const p = new THREE.Vector3().copy(B.bomb.position);
-      if (nearest(a.team, p) === a) return { goal: B.bomb.position, interact: 'defuse' };
-      return { goal: { x: p.x + 3, y: p.y, z: p.z + (a.id % 2 ? 3 : -3) } };
-    }
-    const site = sites[a.id % sites.length];
-    return { goal: { x: site.x + 3, y: site.y, z: site.z + (a.id % 2 ? -2 : 2) } };
+    if (!this.bomb) return null;
+    this.bombTactics ||= new BombTactics(this);
+    return this.bombTactics.getTask(a);
   }
+  shouldBotInteract(a, task) { return shouldCommitObjective(this, a, task); }
+  reportBombTaskBlocked(a, task) { this.bombTactics?.reportBlocked(a, task); }
   updateBotObjective(a) {
     if (!this.bomb || !a.alive) return;
     const task = this.getBombTask(a);
     const close = task && Math.hypot(a.pos.x - task.goal.x, a.pos.z - task.goal.z) < 0.7;
     if (close && task.interact === 'pickup') this.pickupC4(a);
-    if (close && task.interact === 'plant') this.setC4Selected(a, true);
-    a.objectiveHeld = !!(close && ['plant', 'defuse'].includes(task.interact));
+    // 赶路或交火横移时也更新安全观察期，不能只记住最后一次站在包旁的威胁。
+    const committed = this.shouldBotInteract(a, task);
+    a.objectiveHeld = !!(close && committed);
+    if (a.objectiveHeld && task.interact === 'plant') this.setC4Selected(a, true);
     this.updateObjective(a, a.objectiveHeld);
     if (!a.objectiveHeld && a.c4Selected && !this.isInteracting(a)) this.setC4Selected(a, false);
   }
@@ -574,7 +561,7 @@ export class Game {
     this.clearInput(); this.aimTarget = null; this.killedBy = ''; this.spectatorId = null;
     this.dmgFlash = 0;
     this.closeBagPanel(true); this.screens.show(null);
-    for (const a of this.actors) { a.objectiveHeld = false; this.spawnActor(a); }
+    for (const a of this.actors) { a.objectiveHeld = false; a.objectiveSafeAfter = 0; this.spawnActor(a); }
     this.bomb.beginRound(this.time, this.actors);
     this.bombResult = null;
     this.hud.toast(`第 ${this.bomb.round} 回合 · ${this.bomb.attackTeam === this.player.team ? '进攻方' : '防守方'}${this.bomb.round === this.bomb.config.roundsBeforeSideSwap + 1 ? ' · 已换边' : ''}`, 3);
@@ -1135,6 +1122,9 @@ export class Game {
     if (p.alive && this.aimTarget && this.aimTarget.alive) { aimName = this.aimTarget.name; aimTeam = this.aimTarget.team; }
     this.hud.update(dt, {
       score: this.score, timeLeft: this.timeLeft, goal: this.goal, myTeam: p.team,
+      roster: this.actors.map((a) => ({ id: a.id, team: a.team, alive: a.alive })),
+      myId: p.id,
+      personalStats: { kills: p.stats.k, deaths: p.stats.d },
       hp: p.hp, armor: p.armor, alive: p.alive, weapon: w, scoped: p.scoped && w.def.type === 'sniper', spreadPx,
       yaw: p.yaw, respawnIn: p.respawnT, killedBy: this.killedBy, protect: p.protectT, aimName, aimTeam,
       bomb: this.bombHUD(),

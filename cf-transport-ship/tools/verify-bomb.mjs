@@ -330,7 +330,19 @@ async function resources(browser) {
   const growth = await page.evaluate(async () => {
     const g = window.__game;
     const settle = () => new Promise((resolve) => setTimeout(resolve, 250));
-    const snapshot = () => ({ geometry: g.renderer.renderer.info.memory.geometries, texture: g.renderer.renderer.info.memory.textures, sceneChildren: g.renderer.scene.children.length });
+    const snapshot = () => {
+      // GPU 计数只包含实际渲染注册的几何。菜单视角和海鸥位置会变化，
+      // 所以每次量测先注册整个当前场景，不能靠随机等待或放宽增长阈值。
+      const saved = [];
+      for (const scene of [g.renderer.scene, g.renderer.vmScene]) scene.traverse((object) => {
+        if (!object.geometry) return;
+        saved.push([object, object.frustumCulled]);
+        object.frustumCulled = false;
+      });
+      try { g.renderer.render(); }
+      finally { for (const [object, value] of saved) object.frustumCulled = value; }
+      return { geometry: g.renderer.renderer.info.memory.geometries, texture: g.renderer.renderer.info.memory.textures, sceneChildren: g.renderer.scene.children.length };
+    };
     const cycle = async () => {
       g.startBombMatch(); window.__freezeBots(); await settle();
       g.quitToMenu(); await settle();

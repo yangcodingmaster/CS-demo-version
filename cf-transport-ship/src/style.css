@@ -14,25 +14,34 @@ button{font-family:inherit}
 
 /* ---------- HUD ---------- */
 #hud{position:absolute;inset:0}
-#score{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-#score .team{display:flex;align-items:center;gap:10px;padding:4px 16px;min-width:150px;font-family:var(--num)}
-#score .bl{background:linear-gradient(90deg,rgba(120,26,10,.0),rgba(170,40,16,.85));justify-content:flex-end;clip-path:polygon(12% 0,100% 0,100% 100%,0 100%)}
+#matchHeader{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;width:max-content;max-width:calc(100vw - 32px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+#score{display:flex;align-items:stretch;justify-content:center;gap:0}
+#score .team{display:flex;flex-direction:column;gap:7px;padding:6px 16px 8px;min-width:150px;font-family:var(--num)}
+#score .teamScore{display:flex;align-items:center;gap:10px}
+#score .bl{background:linear-gradient(90deg,rgba(120,26,10,.0),rgba(170,40,16,.85));clip-path:polygon(12% 0,100% 0,100% 100%,0 100%)}
 #score .gr{background:linear-gradient(270deg,rgba(10,50,120,.0),rgba(20,80,170,.85));clip-path:polygon(0 0,88% 0,100% 100%,0 100%)}
+#score .bl .teamScore,#score .bl .teamAlive{justify-content:flex-end}
+#score .gr .teamScore,#score .gr .teamAlive{justify-content:flex-start}
 #score .team .nm{font-family:var(--cn);font-size:13px;letter-spacing:1px;opacity:.9}
 #score .team .pts{font-size:34px;font-weight:700;line-height:1;text-shadow:0 0 8px rgba(0,0,0,.6)}
-#score .mid{background:rgba(5,8,12,.8);padding:4px 16px;text-align:center;min-width:110px;border-top:2px solid var(--accent)}
+#score .mid{display:flex;flex-direction:column;justify-content:center;background:rgba(5,8,12,.8);padding:4px 12px;text-align:center;min-width:110px;border-top:2px solid var(--accent)}
 #score .mid .time{font-family:var(--num);font-size:26px;font-weight:700;letter-spacing:1px;line-height:1.1}
 #score .mid .goal{font-size:11px;color:var(--hudDim);letter-spacing:1px}
 #score .mine{box-shadow:inset 0 -3px 0 #fff}
+#score .teamAlive{display:flex;align-items:center;gap:5px;min-height:8px}
+.aliveDot{display:block;flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:#7b858f;opacity:.45}
+.bl .aliveDot.alive{background:var(--bl2);opacity:1}
+.gr .aliveDot.alive{background:var(--gr2);opacity:1}
+.aliveDot.self{outline:1px solid rgba(255,255,255,.9);outline-offset:2px}
 
-#bombHud{position:absolute;left:50%;top:78px;transform:translateX(-50%);width:min(500px,55vw);padding:9px 14px;background:rgba(8,12,16,.8);border:1px solid rgba(255,255,255,.14);border-top:2px solid var(--accent);text-align:center;font-size:12px;line-height:1.6;box-shadow:0 3px 12px rgba(0,0,0,.3)}
-#bombHud .bombHead{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
-#bombPhase{color:var(--accent);font-size:13px}
-#bombRole{color:var(--hud)}
-#bombObjective{color:var(--hudDim);overflow-wrap:anywhere}
+#bombHud{padding:6px 12px;background:rgba(8,12,16,.8);border:1px solid rgba(255,255,255,.14);border-top:2px solid var(--accent);text-align:center;font-size:11px;line-height:1.5;min-width:0}
+#bombHud .bombHead{display:flex;justify-content:center;align-items:center;gap:12px;white-space:nowrap}
+#bombPhase{color:var(--accent);font-size:12px;flex-shrink:0}
+#bombRole{color:var(--hud);min-width:0;overflow:hidden;text-overflow:ellipsis}
+#bombObjective{color:var(--hudDim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #bombHud.planted{border-top-color:var(--bad)}
 #bombHud.planted #bombPhase{color:#ff8a75}
-#bombAction{position:absolute;left:50%;bottom:116px;transform:translateX(-50%);width:min(520px,58vw);padding:10px 14px;text-align:center;background:rgba(8,12,16,.78);border:1px solid rgba(245,179,33,.3);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+#bombAction{position:absolute;left:50%;bottom:116px;transform:translateX(-50%);width:min(460px,56vw);padding:7px 12px;text-align:center;background:rgba(8,12,16,.78);border:1px solid rgba(245,179,33,.3);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 #bombHint{color:var(--accent)}
 #bombProgressLabel{margin-top:6px;color:var(--hud);font-size:12px}
 .bombTrack{height:5px;background:rgba(255,255,255,.15);margin-top:6px;overflow:hidden}
@@ -42,8 +51,8 @@ button{font-family:inherit}
 #radar{width:100%;height:100%;display:block}
 #radarWrap .lbl{position:absolute;left:6px;bottom:4px;font-size:11px;color:var(--hudDim);letter-spacing:1px}
 
-#feed{position:absolute;top:60px;right:12px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:420px}
-#hud.bomb-mode #feed{top:150px}
+#feed{position:absolute;top:86px;right:12px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:420px}
+#hud.bomb-mode #feed{top:142px}
 #clinks{position:absolute;top:12px;right:12px;display:flex;gap:6px;transition:opacity .2s}
 #clinks a{pointer-events:auto;width:36px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--hud);opacity:.55;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);transition:opacity .15s}
 #clinks a:hover{opacity:1}
@@ -60,6 +69,11 @@ body.lk #clinks{opacity:.22}
 @keyframes kfIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
 
 #vitals{position:absolute;left:14px;bottom:14px;display:flex;gap:8px;font-family:var(--num)}
+#personalStats{position:absolute;left:0;bottom:calc(100% + 7px);display:flex;align-items:center;gap:16px;padding:4px 10px;background:rgba(8,12,16,.62);white-space:nowrap;font-variant-numeric:tabular-nums}
+#personalStats span{display:flex;align-items:baseline;gap:5px}
+#personalStats small{font-size:11px;color:var(--hudDim);letter-spacing:.5px}
+#personalStats b{font-size:17px;line-height:1;font-weight:700;min-width:12px}
+#personalStats #statKD{min-width:30px}
 .vbox{display:flex;align-items:center;gap:8px;background:linear-gradient(180deg,rgba(10,14,18,.7),rgba(10,14,18,.45));padding:6px 14px 6px 10px;clip-path:polygon(0 0,100% 0,92% 100%,0 100%);min-width:132px}
 .vbox .ic{width:26px;height:26px;display:grid;place-items:center;color:var(--accent);font-size:24px;font-weight:900}
 .vbox .val{font-size:40px;font-weight:700;line-height:1;letter-spacing:1px}
@@ -109,6 +123,7 @@ body.lk #clinks{opacity:.22}
 #center .big{font-size:26px;font-weight:700;letter-spacing:2px}
 #center .small{font-size:15px;color:var(--hudDim);margin-top:6px}
 #toast{position:absolute;left:50%;top:18%;transform:translateX(-50%);font-size:18px;text-shadow:0 2px 3px #000;transition:opacity .4s;white-space:nowrap}
+#hud.bomb-mode #toast{top:clamp(142px,18vh,196px)}
 #protect{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);color:#8fd0ff;font-size:14px;letter-spacing:2px;text-shadow:0 1px 2px #000}
 #nameTip{position:absolute;left:50%;top:calc(50% + 26px);transform:translateX(-50%);font-size:14px;font-weight:700;text-shadow:0 1px 2px #000}
 #nameTip.BL{color:var(--bl2)} #nameTip.GR{color:var(--gr2)}

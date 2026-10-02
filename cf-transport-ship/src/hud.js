@@ -29,6 +29,9 @@ export class HUD {
     this.dmgDirs = [];
     this.hitT = 0; this.toastT = 0;
     this.slotsT = 0;
+    this.rosterDots = new Map();
+    this.rosterLabels = {};
+    this.personalStatsKey = null;
     this.radarCtx = this.el.radar.getContext('2d');
     const touch = matchMedia('(pointer:coarse)').matches;
     this.opts = { team: 'BL', primary: 'ak47', size: 6, diff: 'normal', goal: 50, tod: 'day', quality: touch ? 'low' : 'high', sens: 1.0, fov: 78, vol: 0.8 };
@@ -120,7 +123,9 @@ export class HUD {
     e.sBL.textContent = score.BL; e.sGR.textContent = score.GR;
     const tl = Math.max(0, s.timeLeft), mm = (tl / 60) | 0, ss = (tl % 60) | 0;
     e.sTime.textContent = bomb ? clockText(bomb.deadlineLeft) : `${mm}:${ss < 10 ? '0' : ''}${ss}`;
-    e.sGoal.textContent = bomb ? `爆破 · 第 ${bomb.round}/${bomb.maxRounds || 8} 回合` : `团队竞技 · 目标 ${s.goal}`;
+    e.sGoal.textContent = bomb ? `第 ${bomb.round}/${bomb.maxRounds || 8} 回合` : `团队竞技 · 目标 ${s.goal}`;
+    this.updateRoster(s.roster, s.myId);
+    this.updatePersonalStats(s.personalStats);
     this.updateBomb(bomb, s);
     e.tBL.classList.toggle('mine', s.myTeam === 'BL'); e.tGR.classList.toggle('mine', s.myTeam === 'GR');
     // 生命护甲
@@ -190,6 +195,61 @@ export class HUD {
     e.nameTip.textContent = bomb && !s.alive ? '' : s.aimName || ''; e.nameTip.className = bomb && !s.alive ? '' : s.aimTeam || '';
     if (this.slotsT > 0) { this.slotsT -= dt; e.slots.style.opacity = Math.min(1, this.slotsT * 2); } else e.slots.style.opacity = 0;
   }
+  updateRoster(roster, myId) {
+    const rows = { BL: this.el.aliveBL, GR: this.el.aliveGR };
+    const counts = { BL: { total: 0, alive: 0 }, GR: { total: 0, alive: 0 } };
+    const seen = new Set();
+    // 每名角色只创建一次节点；死亡、重生、换边和观战只更新状态。
+    for (const actor of Array.isArray(roster) ? roster : []) {
+      if (!actor || actor.id == null || !rows[actor.team] || seen.has(actor.id)) continue;
+      seen.add(actor.id);
+      const row = rows[actor.team], count = counts[actor.team];
+      let cached = this.rosterDots.get(actor.id);
+      if (!cached) {
+        const node = document.createElement('i');
+        node.className = 'aliveDot';
+        node.dataset.actorId = String(actor.id);
+        node.setAttribute('aria-hidden', 'true');
+        cached = { node, alive: null, self: null };
+        this.rosterDots.set(actor.id, cached);
+      }
+      const alive = actor.alive === true, self = actor.id === myId;
+      if (cached.alive !== alive || cached.self !== self) {
+        cached.node.classList.toggle('alive', alive);
+        cached.node.classList.toggle('dead', !alive);
+        cached.node.classList.toggle('self', self);
+        cached.node.dataset.alive = String(alive);
+        cached.node.title = `${self ? '自己 · ' : ''}${alive ? '存活' : '阵亡'}`;
+        cached.alive = alive; cached.self = self;
+      }
+      if (row.children[count.total] !== cached.node) row.insertBefore(cached.node, row.children[count.total] || null);
+      count.total++;
+      if (alive) count.alive++;
+    }
+    for (const [id, cached] of this.rosterDots) {
+      if (!seen.has(id)) { cached.node.remove(); this.rosterDots.delete(id); }
+    }
+    for (const team of ['BL', 'GR']) {
+      const count = counts[team];
+      const label = `${TEAM_CN[team]}：存活 ${count.alive}/${count.total}`;
+      if (this.rosterLabels[team] !== label) {
+        rows[team].setAttribute('aria-label', label);
+        rows[team].title = label;
+        this.rosterLabels[team] = label;
+      }
+    }
+  }
+  updatePersonalStats(stats) {
+    // stats 始终来自本人的整场累计数据，观战队友不会替换这里的数值。
+    const kills = Number.isFinite(stats?.kills) ? Math.max(0, Math.floor(stats.kills)) : 0;
+    const deaths = Number.isFinite(stats?.deaths) ? Math.max(0, Math.floor(stats.deaths)) : 0;
+    const key = `${kills}/${deaths}`;
+    if (this.personalStatsKey === key) return;
+    this.el.statKills.textContent = kills;
+    this.el.statDeaths.textContent = deaths;
+    this.el.statKD.textContent = deaths === 0 ? '—' : (kills / deaths).toFixed(2);
+    this.personalStatsKey = key;
+  }
   updateBomb(bomb, s) {
     const e = this.el;
     e.hud.classList.toggle('bomb-mode', !!bomb);
@@ -200,7 +260,9 @@ export class HUD {
     const attack = bomb.attackTeam === s.myTeam;
     e.bombPhase.textContent = BOMB_PHASE_CN[bomb.phase] || bomb.phase;
     e.bombRole.textContent = `${TEAM_CN[s.myTeam] || ''} · 本回合${attack ? '进攻' : '防守'}`;
-    e.bombObjective.textContent = `C4 ${BOMB_STATE_CN[bomb.bombState] || bomb.bombState || '等待发放'}${bomb.carrierName ? ` · ${bomb.carrierName}携带` : ''}${bomb.siteId ? ` · ${bomb.siteId} 点` : ''}`;
+    const objective = `C4 · ${BOMB_STATE_CN[bomb.bombState] || bomb.bombState || '等待发放'}${bomb.carrierName ? ` · ${bomb.carrierName}` : ''}${bomb.siteId ? ` · ${bomb.siteId} 点` : ''}`;
+    e.bombObjective.textContent = objective;
+    e.bombObjective.title = objective;
     e.bombHud.classList.toggle('planted', bomb.phase === 'planted');
     e.bombHint.textContent = bomb.hint || '';
     const interaction = bomb.interaction;
@@ -385,23 +447,26 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 const TEMPLATE = `
 <div id="hud" class="hidden">
-  <div id="score">
-    <div class="team bl" id="tBL"><span class="nm">潜伏者</span><span class="pts" id="sBL">0</span></div>
-    <div class="mid"><div class="time" id="sTime">10:00</div><div class="goal" id="sGoal"></div></div>
-    <div class="team gr" id="tGR"><span class="pts" id="sGR">0</span><span class="nm">保卫者</span></div>
+  <div id="matchHeader">
+    <div id="score">
+      <div class="team bl" id="tBL"><div class="teamScore"><span class="nm">潜伏者</span><span class="pts" id="sBL">0</span></div><div class="teamAlive" id="aliveBL" role="img" aria-label="潜伏者存活人数"></div></div>
+      <div class="mid"><div class="time" id="sTime">10:00</div><div class="goal" id="sGoal"></div></div>
+      <div class="team gr" id="tGR"><div class="teamScore"><span class="pts" id="sGR">0</span><span class="nm">保卫者</span></div><div class="teamAlive" id="aliveGR" role="img" aria-label="保卫者存活人数"></div></div>
+    </div>
+    <div id="bombHud" class="hidden"><div class="bombHead"><b id="bombPhase"></b><span id="bombRole"></span></div><div id="bombObjective"></div></div>
   </div>
-  <div id="bombHud" class="hidden"><div class="bombHead"><b id="bombPhase"></b><span id="bombRole"></span></div><div id="bombObjective"></div></div>
   <div id="bombAction" class="hidden"><div id="bombHint"></div><div id="bombProgressWrap" class="hidden" role="progressbar" aria-label="C4 交互进度" aria-valuemin="0" aria-valuemax="100"><div id="bombProgressLabel"></div><div class="bombTrack"><i id="bombProgress"></i></div></div></div>
   <div id="radarWrap"><canvas id="radar"></canvas><div class="lbl" id="radarLabel">运输船</div></div>
   <div id="clinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer" title="GitHub 源码" aria-label="GitHub 源码"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer" title="X @riba2534" aria-label="X @riba2534"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
   <div id="feed"></div>
   <div id="vitals">
+    <div id="personalStats" role="group" aria-label="整场个人战绩"><span><small>K</small><b id="statKills">0</b></span><span><small>D</small><b id="statDeaths">0</b></span><span><small>KD</small><b id="statKD">—</b></span></div>
     <div class="vbox" id="hpBox"><div class="ic">✚</div><div class="val" id="hpVal">100</div></div>
     <div class="vbox" id="arBox"><div class="ic">⛨</div><div class="val" id="arVal">100</div></div>
   </div>
   <div id="slots"></div>
   <div id="ammo"><div class="wname" id="wName"></div><div class="row"><img class="wicon" id="wIcon" alt=""><span class="mag" id="aMag">30</span><span class="res" id="aRes">/ 90</span></div><div class="hint" id="aHint"></div></div>
-  <div id="cross"><i class="t" id="cT"></i><i class="b" id="cB"></i><i class="l" id="cL"></i><i class="r" id="cR"></i></div>
+  <div id="cross"><i class="t" id="cT"></i><i class="b" id="cB"></i><i class="l" id="cL"></i><i class="r" id="cR"></i><i class="d" id="cDot"></i></div>
   <div id="hit"><i></i><i></i><i></i><i></i></div>
   <div id="dmgDirs"></div>
   <div id="scope"><div class="ring"></div><div class="h"></div><div class="v"></div><div class="h2 l"></div><div class="h2 r"></div><div class="v2"></div><div class="dot"></div></div>

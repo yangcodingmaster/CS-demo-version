@@ -39,6 +39,8 @@ python3 -m http.server 8000 --bind 127.0.0.1 --directory dist
 
 个人界面可以改昵称、管理三个四槽背包并进入武器库，配装保存在浏览器的 `cf_player_profile` 里，旧的 `cf_ship_opts.primary` 会迁移到首个背包。团队换包下次复活生效；爆破准备阶段可立即换包，存活且回合进行时锁定，阵亡后可登记下一回合背包。C4 独立携带，不占装备槽。
 
+对局顶部的阵营圆点显示存活人数，阵亡变灰、复活或新回合重新点亮。普通准星带固定中心点；左下角显示自己的整场击杀、死亡和 KD，零死亡时 KD 显示 `—`，观战不会切换成队友战绩。
+
 ## 仓库结构
 
 ```text
@@ -47,6 +49,7 @@ cf-transport-ship/
     profile.js          本地档案：校验、迁移、背包与装备读写
     screens.js          主页、个人界面、背包、武器库界面
     bomb-rules.js       爆破回合、计时与胜负（纯逻辑）
+    bomb-tactics.js     爆破任务负责人、独立守点与安拆判断
     bomb-map.js         通用爆破测试场（不是沙漠灰）
   docs/                 开发规格、装备数据与计算脚本
   tests/                档案、爆破规则和模拟时钟检查
@@ -65,9 +68,10 @@ AGENTS.md               开发边界与验证约定
 
 ```bash
 cd cf-transport-ship
-npm test                      # 档案、爆破规则与模拟时钟
+npm test                      # 档案、爆破规则、模拟时钟与人机行为
 node tools/verify-game.mjs      # 需要 8000 端口的静态预览在运行
 node tools/verify-bomb.mjs      # 爆破交互、整场机器人对局与模式切换
+node tools/verify-hud-bots.mjs  # 存活灯、个人 KD、桌面布局与人机基础行为
 ```
 
 `tools/verify-game.mjs` 用 playwright-core 驱动本机 Chrome，覆盖主页到对局的界面链路、输入屏蔽、换包不刷弹、团队规则回归。自 2026-10-02 起手机端不作为开发与验收项，脚本默认跳过手机分段，需要时用 `M1_MOBILE=1` 打开；截图落在 `tools/shots/`。
