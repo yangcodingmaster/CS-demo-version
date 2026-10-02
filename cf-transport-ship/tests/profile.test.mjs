@@ -286,21 +286,32 @@ test('10. 合法档案不改写，版本不符按 1 迁移', () => {
   assert.ok(r.profile.backpacks.every((b) => isEquippable(b.primary, 'primary')));
 });
 
-test('11. 背包 ID 被修复时，选中项跟着原来那件背包', () => {
+test('11. 缺失 ID 不抢占后续合法 ID，配装与选中背包保持不变', () => {
   const raw = {
     schemaVersion: 1, nickname: '我', selectedBackpackId: 'bag-1',
     backpacks: [
-      { id: '', primary: 'mp5' },        // 缺 ID -> 补成 bag-1
-      { id: 'bag-1', primary: 'awm' },   // 原本叫 bag-1 的背包因重复改成 bag-2
+      { id: '', name: '待修复', primary: 'mp5' },
+      { id: 'bag-1', name: '狙击配置', primary: 'awm', secondary: 'usp', melee: 'knife', throwable: 'he' },
+      { id: 'bag-3', name: '步枪配置', primary: 'm4a1', secondary: 'glock18', melee: 'knife', throwable: 'he' },
     ],
   };
+  const before = JSON.stringify(raw);
   const { profile, notes } = normalizeProfile(raw, null);
-  const ids = profile.backpacks.map((b) => b.id);
-  assert.deepEqual(new Set(ids).size, 3, '仍应修出 3 个唯一背包');
-  const sel = profile.backpacks.find((b) => b.id === profile.selectedBackpackId);
-  assert.ok(sel, '选中项必须指向存在的背包');
-  assert.equal(sel.primary, 'awm', '选中项应跟随原 id=bag-1 的那件背包，而不是占据同名 ID 的另一件');
-  assert.ok(notes.some((n) => n.includes('selectedBackpackId')), '修复过程要留下记录');
+  assert.deepEqual(profile.backpacks.map((b) => b.id), ['bag-2', 'bag-1', 'bag-3']);
+  assert.deepEqual(profile.backpacks[1], raw.backpacks[1], '原合法 bag-1 的 ID、名称与四槽配装完整保留');
+  assert.deepEqual(profile.backpacks[2], raw.backpacks[2], '原合法 bag-3 不因前面的坏数据改名');
+  assert.equal(profile.backpacks[0].primary, 'mp5', '缺失 ID 只修 ID，不丢配装');
+  assert.equal(profile.selectedBackpackId, 'bag-1');
+  assert.equal(JSON.stringify(raw), before, '修复不改动输入档案');
+  assert.ok(notes.some((n) => n.includes('缺少 ID')));
+
+  const { p, s } = open(stored(raw));
+  assert.deepEqual(p.getLoadout('bag-1'), { primary: 'awm', secondary: 'usp', melee: 'knife', throwable: 'he' });
+  assert.deepEqual(JSON.parse(s.dump(PROFILE_KEY)), profile, '写回的档案也保留合法稳定 ID');
+  const reloaded = new Profile(s);
+  reloaded.load();
+  assert.deepEqual(reloaded.data, profile, '刷新后配装仍按原合法 ID 读取');
+  assert.deepEqual(reloaded.notes, [], '修复后的档案再次加载不再改名');
 });
 
 test('12. 选中项无法映射时退回第一个背包', () => {
@@ -311,4 +322,45 @@ test('12. 选中项无法映射时退回第一个背包', () => {
   const { profile, notes } = normalizeProfile(raw, null);
   assert.equal(profile.selectedBackpackId, 'bag-1');
   assert.ok(notes.some((n) => n.includes('无效')));
+});
+
+test('13. 重复 ID 保留第一件，替代 ID 不抢占后续合法背包', () => {
+  const raw = {
+    schemaVersion: 1, nickname: '我', selectedBackpackId: 'bag-3',
+    backpacks: [
+      { id: 'bag-3', name: '第一件', primary: 'mp5', secondary: 'usp', melee: 'knife', throwable: 'he' },
+      { id: 'bag-3', name: '重复件', primary: 'awm', secondary: 'glock18', melee: 'knife', throwable: 'he' },
+      { id: 'bag-2', name: '后续合法件', primary: 'ak47', secondary: 'deagle', melee: 'knife', throwable: 'he' },
+    ],
+  };
+  const { profile, notes } = normalizeProfile(raw, null);
+  assert.deepEqual(profile.backpacks.map((b) => b.id), ['bag-3', 'bag-1', 'bag-2']);
+  assert.deepEqual(profile.backpacks[0], raw.backpacks[0], '同名 ID 保留首次出现的背包');
+  assert.deepEqual(profile.backpacks[1], { ...raw.backpacks[1], id: 'bag-1' }, '重复件只改 ID，保留其配装');
+  assert.deepEqual(profile.backpacks[2], raw.backpacks[2], '修复重复件前先保留后续合法 bag-2');
+  assert.equal(profile.selectedBackpackId, 'bag-3', '重复 ID 无法区分原对象时，选中项固定指向第一件');
+  assert.equal(profile.backpacks.find((b) => b.id === profile.selectedBackpackId).primary, 'mp5');
+  assert.ok(notes.some((n) => n.includes('bag-3 重复，已改用 bag-1')));
+  assert.equal(normalizeProfile(profile, null).changed, false);
+});
+
+test('14. 无效背包项也避让合法 ID，超出保留范围的 ID 不参与预留', () => {
+  const malformed = {
+    schemaVersion: 1, nickname: '我', selectedBackpackId: 'bag-1',
+    backpacks: [null, { id: 'bag-1', primary: 'mp5' }, { id: 'bag-2', primary: 'awm' }],
+  };
+  const fixed = normalizeProfile(malformed, null).profile;
+  assert.deepEqual(fixed.backpacks.map((b) => b.id), ['bag-3', 'bag-1', 'bag-2']);
+  assert.equal(fixed.backpacks[1].primary, 'mp5');
+  assert.equal(fixed.backpacks[2].primary, 'awm');
+  assert.equal(fixed.selectedBackpackId, 'bag-1');
+
+  const excess = {
+    schemaVersion: 1, nickname: '我', selectedBackpackId: '不存在',
+    backpacks: [{ primary: 'mp5' }, { primary: 'awm' }, { primary: 'm4a1' }, { id: 'bag-1', primary: 'ak47' }],
+  };
+  const trimmed = normalizeProfile(excess, null).profile;
+  assert.deepEqual(trimmed.backpacks.map((b) => b.id), ['bag-1', 'bag-2', 'bag-3']);
+  assert.deepEqual(trimmed.backpacks.map((b) => b.primary), ['mp5', 'awm', 'm4a1']);
+  assert.equal(trimmed.selectedBackpackId, 'bag-1');
 });

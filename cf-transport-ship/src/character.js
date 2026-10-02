@@ -233,8 +233,8 @@ export class Soldier {
     if (this.gunId === id) return;
     if (this.gun) {
       this.B.chest.remove(this.gun);
-      // 合并枪械的几何体是每次构建独占的，换枪时释放，避免反复换枪持续占用显存
-      this.gun.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      // buildGunMerged 按武器 ID 缓存几何与材质，其他士兵可能仍在使用。
+      // 换枪只移除本实例；共享缓存随整个游戏生命周期复用。
     }
     this.gunId = id;
     this.gun = buildGunMerged(id);

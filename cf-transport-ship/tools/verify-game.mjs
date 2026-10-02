@@ -681,6 +681,24 @@ async function regressions(browser, errs) {
     return { inMatch, first, last: snap() };
   });
   check('连续重新开局 3 轮后资源不增长', growth.last.tex <= growth.first.tex + 1 && growth.last.geo <= growth.first.geo + 3, JSON.stringify(growth));
+  // 数量稳定不能发现共享几何被销毁后重传；直接监听真实实例共用的 geometry。
+  const ownership = await page.evaluate(() => {
+    const g = window.__game;
+    g.startTeamMatch();
+    const [a, b] = g.actors.filter((x) => !x.isPlayer);
+    a.soldier.setWeapon('ak47'); b.soldier.setWeapon('ak47');
+    const geo = a.soldier.gun.geometry;
+    const shared = geo === b.soldier.gun.geometry;
+    let disposed = 0;
+    const count = () => disposed++;
+    geo.addEventListener('dispose', count);
+    a.soldier.setWeapon('usp');
+    const afterSwitch = disposed;
+    g.quitToMenu();
+    geo.removeEventListener('dispose', count);
+    return { shared, afterSwitch, afterQuit: disposed };
+  });
+  check('同款枪共享几何：换枪及退出不销毁仍由缓存持有的资源', ownership.shared && ownership.afterSwitch === 0 && ownership.afterQuit === 0, JSON.stringify(ownership));
   await page.close();
 }
 

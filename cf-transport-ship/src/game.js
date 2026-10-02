@@ -181,8 +181,7 @@ export class Game {
     setTimeout(() => audio.announce('Go go go!'), 400);
     this.hud.toast(`团队竞技 · 率先达到 <b style="color:#f5b321">${this.goal}</b> 击杀的队伍获胜`, 3.5);
   }
-  // 释放一局独占的 GPU 资源：名牌纹理与材质、机器人的合并枪械几何体、投掷物网格。
-  // 士兵本体几何体按队伍缓存、枪械材质由 gunMaterials() 缓存，都是全局共享，不能在这里释放。
+  // 释放一局独占的 GPU 资源；合并枪械（含飞行手雷）和士兵几何按 ID 缓存，不能逐实例销毁。
   clearMatchObjects() {
     const scene = this.renderer.scene;
     for (const t of this.tags) {
@@ -195,7 +194,6 @@ export class Game {
     for (const a of this.actors) {
       if (!a.soldier) continue;
       const s = a.soldier;
-      if (s.gun) s.gun.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       // 士兵几何体按队伍缓存、贴图由 atlas() 缓存，二者共享不能释放；
       // 材质与骨架（骨骼贴图）是每个实例独占的，必须释放，否则每局都会留下 GPU 纹理
       if (s.mesh && s.mesh.skeleton) s.mesh.skeleton.dispose();
@@ -204,7 +202,7 @@ export class Game {
     }
     this.actors = [];
     for (const n of this.nades) {
-      if (n.mesh) { if (n.mesh.geometry) n.mesh.geometry.dispose(); scene.remove(n.mesh); }
+      if (n.mesh) scene.remove(n.mesh);
     }
     this.nades = [];
   }
