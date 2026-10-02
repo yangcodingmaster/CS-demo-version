@@ -72,6 +72,13 @@ export class Player extends Actor {
     if (this.alive) {
       this.yaw -= dx * sens * fovK;
       this.pitch = THREE.MathUtils.clamp(this.pitch - dy * sens * fovK, -1.5, 1.5);
+      if (g.bomb && !g.canFight()) {
+        if (this.consumePressed('KeyB')) g.toggleLoadout();
+        g.clearInput();
+        this.move(dt, 0, 0, false, false, false);
+        this.updateCamera(dt);
+        return;
+      }
       // 移动
       let f = 0, s = 0;
       if (K.has('KeyW') || K.has('ArrowUp')) f += 1;
@@ -89,7 +96,7 @@ export class Player extends Actor {
       // 武器
       let sw = null;
       for (let i = 1; i <= 4; i++) if (this.consumePressed('Digit' + i)) sw = i - 1;
-      if (this.consumePressed('KeyQ')) sw = this.lastSlot;
+      if (this.consumePressed('KeyQ')) sw = this.c4Selected ? this.c4ReturnSlot : this.lastSlot;
       if (this.mouse.wheel) {
         const dir = this.mouse.wheel > 0 ? 1 : -1; this.mouse.wheel = 0;
         let n = this.slot;
@@ -99,10 +106,19 @@ export class Player extends Actor {
       if (sw !== null && this.inv[sw] && this.inv[sw].def.type === 'grenade' && this.inv[sw].mag <= 0) { g.hud.toast('没有手雷了', 1.2); sw = null; }
       const lp = this.mouse.lp || this.touch.firePressed, rp = this.mouse.rp;
       this.mouse.lp = this.mouse.rp = false; this.touch.firePressed = false;
-      this.weaponUpdate(dt, { fire: this.mouse.l || this.touch.fire, firePressed: lp, alt: this.mouse.r, altPressed: rp, reload: this.consumePressed('KeyR'), sw });
-      if (this.consumePressed('KeyF')) g.vm.inspect();
+      if (g.bomb) {
+        // 已开始安拆时忽略切枪输入；移动或松开 E 会在本段结束前取消进度。
+        if (sw !== null && !g.isInteracting(this)) g.setC4Selected(this, false);
+        g.updatePlayerObjective(this, { select: this.consumePressed('Digit5'), held: K.has('KeyE'), pickup: this.consumePressed('KeyE') });
+      }
+      const busy = g.bomb && (this.c4Selected || g.isInteracting(this));
+      if (!busy) {
+        this.weaponUpdate(dt, { fire: this.mouse.l || this.touch.fire, firePressed: lp, alt: this.mouse.r, altPressed: rp, reload: this.consumePressed('KeyR'), sw });
+        if (this.consumePressed('KeyF')) g.vm.inspect();
+      }
     } else {
       this.pressed.delete('KeyR'); this.mouse.lp = this.mouse.rp = false;
+      if (g.bomb && this.consumePressed('KeyQ')) g.cycleSpectator();
     }
     if (this.consumePressed('KeyB')) g.toggleLoadout();
     this.pressed.clear();
@@ -111,6 +127,7 @@ export class Player extends Actor {
   updateCamera(dt) {
     const g = this.game, cam = g.renderer.camera;
     if (!this.alive) {
+      if (g.bomb) { g.updateBombSpectator(); return; }
       // 死亡镜头：抬高并看向击杀者
       const dc = this.deathCam;
       if (dc) {

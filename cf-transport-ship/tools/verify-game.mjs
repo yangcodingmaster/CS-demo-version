@@ -165,14 +165,15 @@ async function uiFlow(browser, errs) {
   const tap = async (sel) => { await page.locator(sel).first().click({ timeout: 8000 }); await page.waitForTimeout(250); };
   let s;
 
-  // 爆破入口必须是明确的开发中提示，且点了不进入任何模式
-  // 注意：该按钮带 aria-disabled="true"，Playwright 会按不可点击处理，这里用 force 绕过可操作性检查
+  // 爆破入口已开放测试场；沙漠灰未核定，设置页必须明确测试场名称。
   const bomb = page.locator('#home [data-act="bomb"]');
   const bombOff = await bomb.getAttribute('class');
   const bombAria = await bomb.getAttribute('aria-disabled');
-  await bomb.click({ force: true, timeout: 5000 });
+  await bomb.click({ timeout: 5000 });
   await page.waitForTimeout(250);
-  check('主页：爆破入口标为开发中且点击不进入', /off/.test(bombOff || '') && bombAria === 'true' && (await snapshot(page)).screen === 'home', JSON.stringify({ cls: bombOff, aria: bombAria }));
+  const bombSetup = await page.evaluate(() => ({ mode: window.__game.selectedMode, title: document.getElementById('setupTitle').textContent, menu: !document.getElementById('menu').classList.contains('hidden') }));
+  check('主页：爆破入口进入明确标注的测试场设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '爆破测试场', JSON.stringify(bombSetup));
+  await page.locator('#btnMenuBack').click();
 
   await tap('#home [data-act="team"]');
   check('主页 → 团队模式设置', await page.locator('#menu').isVisible(), JSON.stringify({ visible: await page.locator('#menu').isVisible() }));
@@ -236,7 +237,7 @@ async function uiFlow(browser, errs) {
   const armCount = await page.locator('#armory .m1Arm').count();
   const armIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.w));
   check('武器库主武器只列 4 件已实现装备', armCount === 4 && armIds.every((id) => ['ak47', 'm4a1', 'awm', 'mp5'].includes(id)), JSON.stringify(armIds));
-  const plannedShown = await page.evaluate(() => ['usp', 'glock18', 'flash', 'smoke'].filter((id) => document.querySelector(`#armory [data-w="${id}"]`)).length);
+  const plannedShown = await page.evaluate(() => ['flash', 'smoke'].filter((id) => document.querySelector(`#armory [data-w="${id}"]`)).length);
   check('武器库不出现未交付装备', plannedShown === 0, String(plannedShown));
 
   await tap('#armory .m1Arm[data-w="mp5"]');
@@ -335,7 +336,7 @@ async function storage(browser, errs) {
   await ready(p2, BASE + '?nolock');
   s = await snapshot(p2);
   check('端到端：损坏档案回退为 3 个唯一背包', s.bags.length === 3 && new Set(s.bags.map((b) => b.split(':')[0])).size === 3, s.bags.join(','));
-  check('端到端：未交付 ID usp/flash 被回退', !s.bags.some((b) => /usp|flash/.test(b)), s.bags.join(','));
+  check('端到端：主武器槽的错误类别 USP 与未交付 flash 被回退', !s.bags.some((b) => /usp|flash/.test(b)), s.bags.join(','));
   check('端到端：类别不符的副武器槽未被主武器顶替', (await p2.evaluate(() => window.__game.profile.data.backpacks[0].secondary)) === 'deagle');
   check('端到端：无效选中项回退到合法背包', ['bag-1', 'bag-2', 'bag-3'].includes(s.selected), String(s.selected));
   check('端到端：坏档案下仍能开局', await p2.evaluate(() => { window.__game.startTeamMatch(); return true; }));

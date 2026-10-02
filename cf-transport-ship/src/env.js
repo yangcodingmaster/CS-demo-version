@@ -231,7 +231,14 @@ export class Environment {
     this.envRT = null;
     this.shipDist = 0;
     this.shipSpeed = 6.5;
+    this.mapKind = 'ship';
     this.apply('day');
+  }
+  setMapKind(kind) {
+    this.mapKind = kind === 'ship' ? 'ship' : 'land';
+    this.ocean.visible = this.mapKind === 'ship';
+    this.shipSpeed = this.mapKind === 'ship' ? 6.5 : 0;
+    this.shipDist = 0;
   }
   apply(name) {
     const P = this.preset = PRESETS[name] || PRESETS.day;
@@ -244,13 +251,16 @@ export class Environment {
     u.sunPosition.value.copy(this.sunDir);
     this.sun.color.set(P.sunColor); this.sun.intensity = P.sunInt;
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 120);
-    // 阴影相机包住整艘可见船体
+    // 根据地图边界调整阴影，陆地测试场不沿用运输船的窄船身范围。
     const cam = this.sun.shadow.camera;
     const lightM = new THREE.Matrix4().lookAt(this.sun.position, this.sun.target.position, new THREE.Vector3(0, 1, 0));
     const inv = lightM.clone().invert();
     const box = new THREE.Box3();
     const pts = [];
-    for (const x of [-58, 40]) for (const y of [-1, 26]) for (const z of [-15, 15]) pts.push(new THREE.Vector3(x, y, z));
+    const shadowBounds = this.mapKind === 'ship'
+      ? [[-58, 40], [-1, 26], [-15, 15]]
+      : [[-32, 32], [-1, 10], [-25, 25]];
+    for (const x of shadowBounds[0]) for (const y of shadowBounds[1]) for (const z of shadowBounds[2]) pts.push(new THREE.Vector3(x, y, z));
     const lp = new THREE.Vector3();
     for (const p of pts) { lp.copy(p).sub(this.sun.position).applyMatrix4(inv); box.expandByPoint(lp); }
     cam.left = box.min.x; cam.right = box.max.x; cam.bottom = box.min.y; cam.top = box.max.y;
@@ -275,8 +285,11 @@ export class Environment {
     for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG']) u2[k].value = u[k].value;
     u2.sunPosition.value.copy(this.sunDir);
     envScene.add(sky2);
-    // 海面近似：深色大圆盘，使环境光下半球偏暗
-    const disk = new THREE.Mesh(new THREE.CircleGeometry(30000, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(this.preset.deep).multiplyScalar(2.2) }));
+    // 地图下半球环境色随海面/陆地切换，不把海面反光带到测试场。
+    const groundColor = this.mapKind === 'ship'
+      ? new THREE.Color(this.preset.deep).multiplyScalar(2.2)
+      : new THREE.Color(0x9c8b6f);
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(30000, 32), new THREE.MeshBasicMaterial({ color: groundColor }));
     disk.rotation.x = -Math.PI / 2; disk.position.y = -50;
     envScene.add(disk);
     if (this.envRT) this.envRT.dispose();

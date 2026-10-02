@@ -53,7 +53,7 @@ export class Actor {
     this.soldier.setWeapon(this.loadout.primary);
   }
   spawn(sp) {
-    this.pos.set(sp.x, 0.02, sp.z); this.vel.set(0, 0, 0);
+    this.pos.set(sp.x, (sp.y || 0) + 0.02, sp.z); this.vel.set(0, 0, 0);
     this.yaw = sp.yaw; this.pitch = 0; this.punchP = this.punchY = 0;
     this.hp = 100; this.armor = 100; this.alive = true; this.deadT = 0;
     this.crouch = false; this.height = STAND_H; this.eyeH = EYE_STAND;

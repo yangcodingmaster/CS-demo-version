@@ -592,6 +592,7 @@ export function buildMap(scene, T, world, opts = {}) {
 
   return {
     spawns, lampSpots, funnelTop, meshes, materials: matDefs,
+    ownedTextures: [ao],
     update(dt, t) { for (const f of anim) f(dt, t); },
   };
 }

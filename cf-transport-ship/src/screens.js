@@ -39,11 +39,11 @@ const HOME_HTML = `
   <div class="m1Notice" data-role="notice"></div>
   <div class="m1Menu">
     <button class="m1Btn go" data-act="team"><b>团队竞技</b><small>运输船 · 选择初始背包后进入对局</small></button>
-    <button class="m1Btn off" data-act="bomb" aria-disabled="true"><b>爆破模式</b><small>沙漠灰 · 开发中</small></button>
+    <button class="m1Btn" data-act="bomb"><b>爆破模式</b><small>爆破测试场 · 5v5 回合对局</small></button>
     <button class="m1Btn" data-act="personal"><b>个人界面</b><small>昵称 · 三个背包 · 武器库</small></button>
     <button class="m1Btn" data-act="settings"><b>设置</b><small>灵敏度 · FOV · 音量 · 画质</small></button>
   </div>
-  <div class="m1Foot">M1 交付主页、个人界面、背包与武器库；爆破模式与战术投掷物按后续阶段加入。</div>
+  <div class="m1Foot">团队竞技使用运输船；爆破模式使用 A/B 测试场。CF 沙漠灰参考待提供，战术投掷物按后续阶段加入。</div>
 </div>`;
 
 const PERSONAL_HTML = `
@@ -212,10 +212,7 @@ export class Screens {
   _act(act) {
     switch (act) {
       case 'team': this._click(); this._call('showTeamSetup'); break;
-      case 'bomb':
-        this._click();
-        this._notify('爆破模式仍在开发中，M1 只开放团队竞技', 'warn');
-        break;
+      case 'bomb': this._click(); this._call('showBombSetup'); break;
       case 'personal': this._click(); this._call('showPersonal'); break;
       case 'settings': this._click(); this._call('showSettings'); break;
       case 'home': this._click(); this._call('showHome'); break;
@@ -223,7 +220,7 @@ export class Screens {
       case 'bag': this._click(); this.openBackpack({ context: 'manage' }); break;
       case 'saveNick': this._saveNick(); break;
       case 'back': this._back(); break;
-      case 'start': this._click('start'); this._call('startTeamMatch'); break;
+      case 'start': this._click('start'); this._call('startSelectedMatch'); break;
       case 'closeBag': this._click(); this._call('closeBagPanel'); break;
       default: break;
     }
@@ -236,7 +233,7 @@ export class Screens {
     else if (v === 'backpack') {
       if (this.bagCtx === 'match') this._call('closeBagPanel');
       else this._call('showPersonal');
-    } else if (v === 'bagSelect') this._call('showTeamSetup');
+    } else if (v === 'bagSelect') this._call('showSelectedSetup');
     else if (v === 'personal') this._call('showHome');
   }
 
@@ -265,10 +262,21 @@ export class Screens {
       return;
     }
     if (ctx === 'match') {
+      const bomb = this.g.mode === 'bomb';
+      const preparation = bomb && this.g.bomb && this.g.bomb.phase === 'preparation';
+      if (bomb && !preparation && this.g.player && this.g.player.alive) {
+        this._notify('回合进行中不能更换背包，请在回合准备时或阵亡后选择', 'warn');
+        return;
+      }
       this._click();
       const active = this._playerBag('activeBagId');
-      this._call('requestBagChange', bagId);
-      this._notify(bagId === active ? `${name} 正在使用` : `已登记：下次复活使用${name}`, bagId === active ? 'warn' : 'ok');
+      const res = this._call('requestBagChange', bagId);
+      if (bomb && (res === false || (res && res.ok === false))) {
+        this._notify('当前不能更换背包，请在回合准备时或阵亡后选择', 'warn');
+      } else {
+        const next = bomb ? '下一回合' : '下次复活';
+        this._notify(preparation ? `${name} 已在本回合生效` : bagId === active ? `${name} 正在使用` : `已登记：${next}使用${name}`, bagId === active && !preparation ? 'warn' : 'ok');
+      }
       this.refresh();
       return;
     }
@@ -361,10 +369,14 @@ export class Screens {
     const box = c.querySelector('[data-role=bagCards]');
     const foot = c.querySelector('[data-role=bagFoot]');
     const note = c.querySelector('[data-role=bagNote]');
+    const bomb = ctx === 'match' ? this.g.mode === 'bomb' : this.g.selectedMode === 'bomb';
+    const preparation = bomb && this.g.bomb && this.g.bomb.phase === 'preparation';
     const meta = {
       manage: ['背包', '管理背包 · 点槽位进入武器库', '「主页默认」是进入团队竞技时使用的背包；点某个槽位可以更换该槽位的装备。'],
-      select: ['选择初始背包', '团队竞技 · 开局使用主页默认背包', '点整张卡片把某个背包设为主页默认，然后进入对局。'],
-      match: ['更换背包', '局内更换 · 下次复活生效', '「当前使用」是本次出生已在用的背包；「下次复活生效」是已登记、复活时切换的背包。'],
+      select: ['选择初始背包', `${bomb ? '爆破测试场' : '团队竞技'} · 开局使用主页默认背包`, '点整张卡片把某个背包设为主页默认，然后进入对局。'],
+      match: bomb
+        ? ['更换背包', preparation ? '回合准备 · 立即生效' : '回合对局 · 阵亡后登记下一回合', '准备阶段可立即更换；存活且回合进行时锁定；阵亡后可登记下一回合的配装。']
+        : ['更换背包', '局内更换 · 下次复活生效', '「当前使用」是本次出生已在用的背包；「下次复活生效」是已登记、复活时切换的背包。'],
     }[ctx] || ['背包', '', ''];
     if (title) title.textContent = meta[0];
     if (sub) sub.textContent = `${meta[1]} · 共 ${bags.length} 个背包`;
@@ -382,9 +394,11 @@ export class Screens {
     if (note) {
       if (ctx === 'match') {
         const pend = this._playerBag('pendingBagId');
-        note.textContent = pend
-          ? `已登记：下次复活使用${this._bagName(pend)}。换包不会补充弹药或投掷物。`
-          : '还没有登记更换：点卡片登记「下次复活生效」的背包。换包不会补充弹药或投掷物。';
+        note.textContent = bomb
+          ? `${pend ? `已登记：下一回合使用${this._bagName(pend)}。` : ''}C4 为独立任务物品：按 5 选择，按住 E 安包或拆包；按 E 拾取掉落 C4。换包不补充弹药或投掷物。`
+          : pend
+            ? `已登记：下次复活使用${this._bagName(pend)}。换包不会补充弹药或投掷物。`
+            : '还没有登记更换：点卡片登记「下次复活生效」的背包。换包不会补充弹药或投掷物。';
       } else {
         note.textContent = '弹药与投掷物只在新出生时生成；换武器、开面板都不会补给。';
       }
@@ -456,7 +470,7 @@ export class Screens {
     const out = [];
     if (ctx === 'match') {
       if (active && id === active) out.push(['on', '当前使用']);
-      if (pending && id === pending) out.push(['next', '下次复活生效']);
+      if (pending && id === pending) out.push(['next', this.g.mode === 'bomb' ? '下一回合生效' : '下次复活生效']);
       if (!out.length && !active && !pending && id === sel) out.push(['home', '主页默认']);
     } else if (id === sel) out.push(['home', '主页默认']);
     return out.map(([k, t]) => `<span class="m1Tag ${k}">${t}</span>`).join('');

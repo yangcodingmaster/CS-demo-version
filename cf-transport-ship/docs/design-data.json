@@ -4,6 +4,8 @@
   "confirmedMapId": "desert_gray",
   "confirmedMapName": "CF 沙漠灰",
   "mapReferenceStatus": "awaiting_user_reference",
+  "bombImplementationStatus": "playable_test_arena_desert_gray_pending",
+  "runtimeBombDefaultsSource": "src/bomb-rules.js:BOMB_DEFAULTS",
   "weaponStyle": "现有程序化简化 3D，精修比例、材质和动作",
   "backpackCount": 3,
   "slots": [

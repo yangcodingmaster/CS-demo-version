@@ -25,11 +25,25 @@ button{font-family:inherit}
 #score .mid .goal{font-size:11px;color:var(--hudDim);letter-spacing:1px}
 #score .mine{box-shadow:inset 0 -3px 0 #fff}
 
+#bombHud{position:absolute;left:50%;top:78px;transform:translateX(-50%);width:min(500px,55vw);padding:9px 14px;background:rgba(8,12,16,.8);border:1px solid rgba(255,255,255,.14);border-top:2px solid var(--accent);text-align:center;font-size:12px;line-height:1.6;box-shadow:0 3px 12px rgba(0,0,0,.3)}
+#bombHud .bombHead{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+#bombPhase{color:var(--accent);font-size:13px}
+#bombRole{color:var(--hud)}
+#bombObjective{color:var(--hudDim);overflow-wrap:anywhere}
+#bombHud.planted{border-top-color:var(--bad)}
+#bombHud.planted #bombPhase{color:#ff8a75}
+#bombAction{position:absolute;left:50%;bottom:116px;transform:translateX(-50%);width:min(520px,58vw);padding:10px 14px;text-align:center;background:rgba(8,12,16,.78);border:1px solid rgba(245,179,33,.3);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+#bombHint{color:var(--accent)}
+#bombProgressLabel{margin-top:6px;color:var(--hud);font-size:12px}
+.bombTrack{height:5px;background:rgba(255,255,255,.15);margin-top:6px;overflow:hidden}
+#bombProgress{display:block;height:100%;width:0;background:var(--accent)}
+
 #radarWrap{position:absolute;top:12px;left:12px;width:196px;height:196px;border:1px solid rgba(255,255,255,.18);background:rgba(4,8,10,.55);border-radius:6px;overflow:hidden;box-shadow:0 0 0 3px rgba(0,0,0,.25)}
 #radar{width:100%;height:100%;display:block}
 #radarWrap .lbl{position:absolute;left:6px;bottom:4px;font-size:11px;color:var(--hudDim);letter-spacing:1px}
 
 #feed{position:absolute;top:60px;right:12px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:420px}
+#hud.bomb-mode #feed{top:150px}
 #clinks{position:absolute;top:12px;right:12px;display:flex;gap:6px;transition:opacity .2s}
 #clinks a{pointer-events:auto;width:36px;height:36px;border-radius:8px;display:grid;place-items:center;color:var(--hud);opacity:.55;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);transition:opacity .15s}
 #clinks a:hover{opacity:1}
@@ -152,6 +166,10 @@ body.lk #clinks{opacity:.22}
 .go:hover{filter:brightness(1.12)}
 .go.sec{background:rgba(255,255,255,.1);color:#fff;font-size:15px;letter-spacing:4px;padding:10px}
 .note{font-size:12px;color:#8c959c;margin-top:10px;line-height:1.6}
+#bombRules{margin-bottom:12px;padding:12px 14px;border:1px solid rgba(245,179,33,.28);background:rgba(245,179,33,.05);font-size:12px;line-height:1.7}
+#bombRules b{color:var(--accent);font-size:13px}
+#bombRules p{margin:6px 0 0;color:#b8c1c9}
+#setupTitle{overflow-wrap:anywhere}
 #loading{position:absolute;inset:0;pointer-events:auto;background:#05070a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 #loading .t{font-size:40px;font-weight:900;letter-spacing:10px}
 #loading .s{font-family:var(--num);letter-spacing:4px;color:var(--hudDim)}
@@ -164,6 +182,7 @@ body.lk #clinks{opacity:.22}
 .endBox .res{font-size:52px;font-weight:900;letter-spacing:14px;text-align:center}
 .endBox .res.win{color:#ffd24a;text-shadow:0 0 30px rgba(255,160,0,.5)}
 .endBox .res.lose{color:#9aa4ad}
+.endBox .res.draw{color:#dfe4e8}
 .endBox .sc{text-align:center;font-family:var(--num);font-size:22px;margin:6px 0 16px;color:var(--hudDim)}
 .endBox .mvp{text-align:center;margin-bottom:14px;color:var(--accent)}
 .loadBox{width:min(760px,94vw);padding:22px;background:var(--panel2);border:1px solid rgba(255,255,255,.12)}
