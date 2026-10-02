@@ -66,7 +66,7 @@
       "id": "usp",
       "name": "USP",
       "category": "secondary",
-      "availability": "planned",
+      "availability": "existing",
       "deliveryStage": "M1B",
       "visualDirection": "无消音器的黑灰标准手枪，细长套筒、独立扳机护圈与握把"
     },
@@ -74,7 +74,7 @@
       "id": "glock18",
       "name": "Glock-18",
       "category": "secondary",
-      "availability": "planned",
+      "availability": "existing",
       "deliveryStage": "M1B",
       "visualDirection": "短方套筒与深色聚合物握把，轮廓区别于 USP 和沙漠之鹰"
     },
