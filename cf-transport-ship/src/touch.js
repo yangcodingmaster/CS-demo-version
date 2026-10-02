@@ -31,15 +31,20 @@ export class TouchControls {
     btn('R', 40, 250, 50, () => { const p = P(); if (p) p.pressed.add('KeyR'); });
     btn('切', 100, 250, 50, () => { const p = P(); if (p) p.pressed.add('KeyQ'); });
     btn('镜', 40, 60, 60, () => { const p = P(); if (p) { p.mouse.rp = true; } });
+    btn('包', 160, 250, 50, () => { if (!this.g.uiBlocking() || this.g.inLoadout) this.g.toggleLoadout(); });
     // 摇杆
     let padId = null, cx = 0, cy = 0, lookId = null, lx = 0, ly = 0;
+    // 非对局、暂停或面板打开时，屏幕上的触摸不再被当作摇杆/视角
+    const active = () => this.g.playing && !this.g.uiBlocking();
     window.addEventListener('touchstart', (e) => {
+      if (!active()) return;
       for (const t of e.changedTouches) {
         if (t.clientX < W() * 0.4 && padId === null) { padId = t.identifier; const r = pad.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
         else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
       }
     }, { passive: true });
     window.addEventListener('touchmove', (e) => {
+      if (!active()) return;
       const p = P();
       for (const t of e.changedTouches) {
         if (t.identifier === padId && p) {

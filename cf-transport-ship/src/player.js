@@ -24,12 +24,15 @@ export class Player extends Actor {
       const p = P(); if (!p) return;
       if (['Tab', 'Space', 'KeyB', 'KeyF', 'KeyQ', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
+      // 暂停或背包面板打开时只接受 B（用于关闭面板），其余按键不入队，避免关闭后残留按住状态
+      if (g.uiBlocking()) { if (e.code === 'KeyB') p.pressed.add('KeyB'); return; }
       p.keys.add(e.code); p.pressed.add(e.code);
     });
     window.addEventListener('keyup', (e) => { const p = g.player; if (p) p.keys.delete(e.code); });
     window.addEventListener('blur', () => { const p = g.player; if (p) { p.keys.clear(); p.mouse.l = p.mouse.r = false; } });
     canvas.addEventListener('mousedown', (e) => {
       const p = P(); if (!p) return;
+      if (g.inLoadout) return;
       if (!g.locked && !g.touchMode) { g.lock(); return; }
       if (e.button === 0) { p.mouse.l = true; p.mouse.lp = true; }
       if (e.button === 2) { p.mouse.r = true; p.mouse.rp = true; }
@@ -37,16 +40,26 @@ export class Player extends Actor {
     window.addEventListener('mouseup', (e) => { const p = g.player; if (!p) return; if (e.button === 0) p.mouse.l = false; if (e.button === 2) p.mouse.r = false; });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
-      const p = P(); if (!p || !g.locked) return;
+      const p = P(); if (!p || !g.locked || g.uiBlocking()) return;
       // 过滤浏览器偶发的异常大位移
       if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
       p.mouse.dx += e.movementX; p.mouse.dy += e.movementY;
     });
-    window.addEventListener('wheel', (e) => { const p = P(); if (p && g.locked) p.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
+    window.addEventListener('wheel', (e) => { const p = P(); if (p && g.locked && !g.uiBlocking()) p.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
   }
   consumePressed(code) { const p = this.pressed.has(code); this.pressed.delete(code); return p; }
   update(dt) {
     const g = this.game, K = this.keys;
+    if (g.uiBlocking()) {
+      // 暂停 / 局内背包面板：不做视角、移动、开火与切枪，只允许 B 关闭背包面板
+      if (this.consumePressed('KeyB')) g.toggleLoadout();
+      this.pressed.clear();
+      this.mouse.dx = this.mouse.dy = this.mouse.wheel = 0;
+      this.mouse.l = this.mouse.r = this.mouse.lp = this.mouse.rp = false;
+      this.lookDX = this.lookDY = 0;
+      this.updateCamera(dt);
+      return;
+    }
     const sens = g.opts.sens * 0.0022;
     let dx = this.mouse.dx, dy = this.mouse.dy;
     this.mouse.dx = this.mouse.dy = 0;

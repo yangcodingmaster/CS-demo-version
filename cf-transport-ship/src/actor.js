@@ -15,6 +15,8 @@ export class Actor {
     this.yaw = 0; this.pitch = 0; this.punchP = 0; this.punchY = 0; this.aimPunch = 0;
     this.hp = 100; this.armor = 100; this.alive = false; this.deadT = 0; this.respawnT = 0; this.protectT = 0;
     this.inv = []; this.slot = 0; this.lastSlot = 1; this.readyAt = 0;
+    // 配装：loadout 是当前生效配装，nextLoadout/pendingBagId 是下次出生待生效
+    this.loadout = null; this.activeBagId = null; this.pendingBagId = null; this.nextLoadout = null;
     this.stats = { k: 0, d: 0, hs: 0, shots: 0, hits: 0 };
     this.streak = 0; this.lastKillT = -99; this.multi = 0;
     this.radarT = 0; this.ping = 20 + ((Math.random() * 40) | 0);
@@ -32,13 +34,23 @@ export class Actor {
     const p = this.pitch + this.punchP, y = this.yaw + this.punchY;
     return out.set(-Math.sin(y) * Math.cos(p), Math.sin(p), -Math.cos(y) * Math.cos(p));
   }
-  giveLoadout(primary) {
-    this.primary = primary || this.primary;
-    this.inv = [new WeaponState(this.primary), new WeaponState('deagle'), new WeaponState('knife'), new WeaponState('he')];
+  // 配装：接受 { primary, secondary, melee, throwable }，兼容旧的字符串参数（只有主武器）
+  giveLoadout(loadout) {
+    const L = typeof loadout === 'string' || !loadout ? { primary: loadout } : loadout;
+    const pick = (v, fallback) => (v && WEAPONS[v] ? v : fallback);
+    this.loadout = {
+      primary: pick(L.primary, this.primary),
+      secondary: pick(L.secondary, 'deagle'),
+      melee: pick(L.melee, 'knife'),
+      throwable: pick(L.throwable, 'he'),
+    };
+    this.primary = this.loadout.primary;
+    this.inv = [this.loadout.primary, this.loadout.secondary, this.loadout.melee, this.loadout.throwable]
+      .map((id) => new WeaponState(id));
     for (const w of this.inv) w.patternSeed = Math.random() * 6;
     this.slot = 0; this.lastSlot = 1;
     this.readyAt = this.game.time + 0.3;
-    this.soldier.setWeapon(this.primary);
+    this.soldier.setWeapon(this.loadout.primary);
   }
   spawn(sp) {
     this.pos.set(sp.x, 0.02, sp.z); this.vel.set(0, 0, 0);
@@ -46,7 +58,10 @@ export class Actor {
     this.hp = 100; this.armor = 100; this.alive = true; this.deadT = 0;
     this.crouch = false; this.height = STAND_H; this.eyeH = EYE_STAND;
     this.protectT = 3; this.onGround = true;
-    this.giveLoadout(this.nextPrimary || this.primary);
+    // 出生与复活是唯一重新生成弹药和投掷物的时机
+    this.giveLoadout(this.nextLoadout || this.loadout || this.primary);
+    if (this.pendingBagId) { this.activeBagId = this.pendingBagId; this.pendingBagId = null; }
+    this.nextLoadout = null;
     this.soldier.reset();
     this.soldier.root.position.copy(this.pos);
     this.soldier.root.visible = !this.isPlayer;

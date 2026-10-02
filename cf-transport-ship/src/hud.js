@@ -1,5 +1,5 @@
 // HUD 与菜单（DOM）
-import { WEAPONS, PRIMARIES } from './weapons.js';
+import { WEAPONS } from './weapons.js';
 
 const TEAM_CN = { BL: '潜伏者', GR: '保卫者' };
 const $ = (s, r = document) => r.querySelector(s);
@@ -56,26 +56,17 @@ export class HUD {
         this.g.onOption?.(k, o[k]);
       });
     }
-    $('#btnStart').addEventListener('click', () => this.g.startMatch());
+    $('#btnStart').addEventListener('click', () => this.g.showBagSelect());
+    $('#btnMenuBack').addEventListener('click', () => this.g.onMenuBack?.());
     $('#btnResume').addEventListener('click', () => this.g.resume());
     $('#btnQuit').addEventListener('click', () => this.g.quitToMenu());
-    $('#btnAgain').addEventListener('click', () => this.g.startMatch());
+    $('#btnAgain').addEventListener('click', () => this.g.startTeamMatch());
     $('#btnMenu').addEventListener('click', () => this.g.quitToMenu());
-    for (const c of this.root.querySelectorAll('#loadCards .card')) {
-      c.addEventListener('click', () => {
-        this.g.chooseLoadout(c.dataset.w);
-        for (const x of this.root.querySelectorAll('#loadCards .card')) x.classList.toggle('on', x === c);
-      });
-    }
-    $('#btnLoadClose').addEventListener('click', () => this.g.closeLoadout());
     if (matchMedia('(pointer:coarse)').matches) $('#touchNote').classList.remove('hidden');
     for (const a of this.root.querySelectorAll('#clinks a, .mlinks a'))
       a.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
-  setIcons(icons) {
-    this.icons = icons;
-    for (const c of this.root.querySelectorAll('#loadCards .card')) c.querySelector('img').src = icons[c.dataset.w] || '';
-  }
+  setIcons(icons) { this.icons = icons; }
   syncControls() {
     const o = this.opts;
     for (const s of this.root.querySelectorAll('.seg[data-k]')) for (const b of s.querySelectorAll('button')) b.classList.toggle('on', String(o[s.dataset.k]) === b.dataset.v);
@@ -83,10 +74,12 @@ export class HUD {
       const k = sl.dataset.k; sl.querySelector('input').value = o[k]; sl.querySelector('span').textContent = (+o[k]).toFixed(k === 'fov' ? 0 : 2);
     }
   }
-  show(name) {
+  show(name, opts = {}) {
     if (name === 'menu' || name === 'pause') this.syncControls();
-    for (const n of ['menu', 'pause', 'end', 'loadout', 'loading']) this.el[n].classList.toggle('hidden', n !== name);
-    this.el.hud.classList.toggle('hidden', name === 'menu' || name === 'loading' || name === 'end');
+    for (const n of ['menu', 'pause', 'end', 'loading']) this.el[n].classList.toggle('hidden', n !== name);
+    // 主页、个人界面、背包等非对局屏由 screens.js 管理，这里只负责隐藏对局 HUD
+    const hideHud = opts.hideHud === true || name === 'menu' || name === 'loading' || name === 'end';
+    this.el.hud.classList.toggle('hidden', hideHud);
   }
   loading(p, text) { this.el.loadBar.style.width = (p * 100).toFixed(0) + '%'; if (text) this.el.loadTxt.textContent = text; }
 
@@ -288,12 +281,6 @@ export class HUD {
 
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-const PRIM_CARDS = PRIMARIES.map((id) => {
-  const d = WEAPONS[id];
-  const sub = { ak47: '潜伏者经典 · 伤害高', m4a1: '保卫者经典 · 稳定', awm: '一枪致命 · 需开镜', mp5: '射速快 · 移动灵活' }[id];
-  return `<div class="card" data-w="${id}"><img alt=""><b>${d.name}</b><small>${sub}</small></div>`;
-}).join('');
-
 const TEMPLATE = `
 <div id="hud" class="hidden">
   <div id="score">
@@ -329,21 +316,20 @@ const TEMPLATE = `
   <div class="menuBox">
     <div class="title">
       <div class="logo">CROSSFIRE · 团队竞技</div>
-      <h1>运输船</h1>
+      <h1>运输船设置</h1>
       <div class="en">TRANSPORT SHIP</div>
       <p>联合国维和行动在监视非法军火出口时，发现一艘从俄罗斯驶往尼日利亚的可疑货轮。保卫者（Global Risk）奉命登船突击检查，却遭到潜伏者（Black List）伏击。<br>船头船尾两个船舱出生，中路 V 形斜放集装箱、两侧 L 形箱堆，左右各有一条只能从己方出生点进入的集装箱管道，管道顶上就是可以架枪的二楼。</p>
       <div class="keys">
         <kbd>W A S D</kbd><span>移动　<kbd>Shift</kbd> 静步　<kbd>空格</kbd> 跳　<kbd>C</kbd> 蹲</span>
         <kbd>鼠标左键</kbd><span>开火　<kbd>右键</kbd> 狙击开镜 / 刀重击</span>
-        <kbd>1 2 3 4</kbd><span>主武器 / 手枪 / 刀 / 手雷　<kbd>Q</kbd> 快切　<kbd>滚轮</kbd> 切换</span>
-        <kbd>R</kbd><span>换弹　<kbd>F</kbd> 检视武器　<kbd>B</kbd> 更换主武器</span>
+        <kbd>1 2 3 4</kbd><span>主武器 / 副武器 / 刀 / 投掷物　<kbd>Q</kbd> 快切　<kbd>滚轮</kbd> 切换</span>
+        <kbd>R</kbd><span>换弹　<kbd>F</kbd> 检视武器　<kbd>B</kbd> 选择背包（下次复活生效）</span>
         <kbd>Tab</kbd><span>计分板　<kbd>Esc</kbd> 暂停 / 设置</span>
       </div>
       <div class="note hidden" id="touchNote">检测到触屏设备：已启用虚拟摇杆（左侧移动、右侧滑动视角）。电脑 + 鼠标体验最佳。</div>
     </div>
     <div class="opts">
       <div class="opt"><div class="lab">阵营</div><div class="seg team" data-k="team"><button data-v="BL">潜伏者<small>Black List</small></button><button data-v="GR">保卫者<small>Global Risk</small></button></div></div>
-      <div class="opt"><div class="lab">主武器</div><div class="seg" data-k="primary"><button data-v="ak47">AK-47</button><button data-v="m4a1">M4A1</button><button data-v="awm">AWM</button><button data-v="mp5">MP5</button></div></div>
       <div class="row2">
         <div class="opt"><div class="lab">对战规模</div><div class="seg" data-k="size"><button data-v="4">4v4</button><button data-v="6">6v6</button><button data-v="8">8v8</button></div></div>
         <div class="opt"><div class="lab">目标击杀</div><div class="seg" data-k="goal"><button data-v="30">30</button><button data-v="50">50</button><button data-v="100">100</button></div></div>
@@ -358,8 +344,9 @@ const TEMPLATE = `
         <div class="opt"><div class="lab">视野 FOV</div><div class="slider" data-k="fov"><input type="range" min="65" max="100" step="1"><span></span></div></div>
         <div class="opt"><div class="lab">音量</div><div class="slider" data-k="vol"><input type="range" min="0" max="1" step="0.05"><span></span></div></div>
       </div>
-      <button class="go" id="btnStart">开 始 游 戏</button>
-      <div class="note">点击开始后鼠标将被锁定，按 Esc 暂停。画质切换会重新加载页面。</div>
+      <button class="go" id="btnStart">下一步：选择背包</button>
+      <button class="go sec" id="btnMenuBack" style="margin-top:10px">返回主页</button>
+      <div class="note">装备与配装在主页的个人界面 → 背包中调整。点击进入对局后鼠标将被锁定，按 Esc 暂停。画质切换会重新加载页面。</div>
       <div class="mlinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer">GitHub 源码</a><span>·</span><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer">X @riba2534</a></div>
     </div>
   </div>
@@ -370,12 +357,7 @@ const TEMPLATE = `
   <div class="opt"><div class="lab">视野 FOV</div><div class="slider" data-k="fov"><input type="range" min="65" max="100" step="1"><span></span></div></div>
   <div class="opt"><div class="lab">音量</div><div class="slider" data-k="vol"><input type="range" min="0" max="1" step="0.05"><span></span></div></div>
   <div class="opt"><div class="lab">时间</div><div class="seg" data-k="tod"><button data-v="day">白天</button><button data-v="dusk">黄昏</button></div></div>
-  <button class="go" id="btnResume">继 续</button><button class="go sec" id="btnQuit" style="margin-top:10px">退出到主菜单</button>
-</div></div>
-
-<div id="loadout" class="screen hidden"><div class="loadBox"><h2>更换主武器</h2><div class="sub">复活时生效；在出生点内立即生效。副武器沙漠之鹰、军刀、手雷自动配备。</div>
-  <div class="cards" id="loadCards">${PRIM_CARDS}</div>
-  <button class="go sec" id="btnLoadClose" style="margin-top:14px">确 定（B）</button>
+  <button class="go" id="btnResume">继 续</button><button class="go sec" id="btnQuit" style="margin-top:10px">退出到主页</button>
 </div></div>
 
 <div id="end" class="screen hidden"><div class="endBox">
