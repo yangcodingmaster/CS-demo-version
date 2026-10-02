@@ -171,18 +171,18 @@ test('6. 类别不符时 equip 返回 ok:false 且不改动数据', () => {
   assert.equal(p.getBackpack('bag-1').secondary, 'usp');
   assert.equal(p.equip('bag-1', 'secondary', 'glock18').ok, true);
   assert.equal(p.getBackpack('bag-1').secondary, 'glock18');
-  assert.deepEqual(p.equip('bag-1', 'melee', 'knife'), { ok: true });
+  assert.deepEqual(p.equip('bag-1', 'melee', 'knife'), { ok: true, saved: true, changed: false }, '同值装备：应用成功且无需改写');
 });
 
 test('7. 存档 -> 重新加载 -> 数据一致', () => {
   const s = new FakeStorage();
   const a = new Profile(s);
   a.load();
-  assert.equal(a.setNickname('老兵'), true);
-  assert.equal(a.selectBackpack('bag-2'), true);
+  assert.deepEqual(a.setNickname('老兵'), { ok: true, saved: true });
+  assert.deepEqual(a.selectBackpack('bag-2'), { ok: true, saved: true });
   assert.equal(a.equip('bag-3', 'primary', 'mp5').ok, true);
-  assert.equal(a.setNickname('   '), false, '空昵称不写入');
-  assert.equal(a.selectBackpack('bag-9'), false);
+  assert.equal(a.setNickname('   ').ok, false, '空昵称不写入');
+  assert.equal(a.selectBackpack('bag-9').ok, false);
   assert.equal(a.data.nickname, '老兵');
 
   const b = new Profile(s);
@@ -204,7 +204,14 @@ test('8. setItem 抛异常（隐私模式）：available=false、save()=false、
   assert.equal(p.data.backpacks.length, 3);
   assert.equal(p.equip('bag-1', 'primary', 'mp5').ok, true, '存储不可用也不阻断本次会话');
   assert.equal(p.getBackpack('bag-1').primary, 'mp5');
-  assert.equal(p.setNickname('无法保存'), true);
+  const eqRes = p.equip('bag-2', 'primary', 'mp5');
+  assert.equal(eqRes.ok, true, '存储不可用也不阻断本次会话');
+  assert.equal(eqRes.saved, false, '装备写盘失败必须如实返回 saved=false，界面才能提示');
+  assert.equal(eqRes.changed, true);
+  assert.equal(p.getBackpack('bag-2').primary, 'mp5', '内存档案仍然生效');
+  const nickRes = p.setNickname('无法保存');
+  assert.equal(nickRes.ok, true, '存储不可用也不阻断本次会话');
+  assert.equal(nickRes.saved, false, 'saved=false 让界面能如实提示没有落盘');
   assert.equal(p.data.nickname, '无法保存');
   assert.deepEqual(Object.values(p.getLoadout('bag-1')), ['mp5', 'deagle', 'knife', 'he']);
   assert.ok(p.notes.some((n) => n.includes('存储不可用')));
@@ -277,4 +284,31 @@ test('10. 合法档案不改写，版本不符按 1 迁移', () => {
   assert.equal(r.changed, true);
   assert.ok(r.notes.some((n) => n.includes('版本')));
   assert.ok(r.profile.backpacks.every((b) => isEquippable(b.primary, 'primary')));
+});
+
+test('11. 背包 ID 被修复时，选中项跟着原来那件背包', () => {
+  const raw = {
+    schemaVersion: 1, nickname: '我', selectedBackpackId: 'bag-1',
+    backpacks: [
+      { id: '', primary: 'mp5' },        // 缺 ID -> 补成 bag-1
+      { id: 'bag-1', primary: 'awm' },   // 原本叫 bag-1 的背包因重复改成 bag-2
+    ],
+  };
+  const { profile, notes } = normalizeProfile(raw, null);
+  const ids = profile.backpacks.map((b) => b.id);
+  assert.deepEqual(new Set(ids).size, 3, '仍应修出 3 个唯一背包');
+  const sel = profile.backpacks.find((b) => b.id === profile.selectedBackpackId);
+  assert.ok(sel, '选中项必须指向存在的背包');
+  assert.equal(sel.primary, 'awm', '选中项应跟随原 id=bag-1 的那件背包，而不是占据同名 ID 的另一件');
+  assert.ok(notes.some((n) => n.includes('selectedBackpackId')), '修复过程要留下记录');
+});
+
+test('12. 选中项无法映射时退回第一个背包', () => {
+  const raw = {
+    schemaVersion: 1, nickname: '我', selectedBackpackId: '不存在',
+    backpacks: [{ id: 'bag-1', primary: 'ak47' }, { id: 'bag-2', primary: 'mp5' }],
+  };
+  const { profile, notes } = normalizeProfile(raw, null);
+  assert.equal(profile.selectedBackpackId, 'bag-1');
+  assert.ok(notes.some((n) => n.includes('无效')));
 });

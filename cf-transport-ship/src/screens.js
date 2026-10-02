@@ -272,12 +272,11 @@ export class Screens {
       this.refresh();
       return;
     }
-    // select：设为主页默认背包（存储不可用时仍在本次会话内生效）
+    // select：设为主页默认背包（存储不可用时仍在本次会话内生效，但要如实提示）
     this._click();
-    const ok = this._try(() => p.selectBackpack(bagId), false);
-    if (ok && p.available === false) this._notify(`主页默认：${name}（本次会话有效，${NO_SAVE_TIP}）`, 'warn');
-    else if (ok) this._notify(`主页默认：${name}`, 'ok');
-    else if (p.available === false) this._notify(NO_SAVE_TIP, 'warn');
+    const res = this._try(() => p.selectBackpack(bagId), { ok: false, saved: false });
+    if (res && res.ok && res.saved === false) this._notify(`主页默认：${name}（本次会话有效，${NO_SAVE_TIP}）`, 'warn');
+    else if (res && res.ok) this._notify(`主页默认：${name}`, 'ok');
     else this._notify(`无法把${name}设为主页默认`, 'bad');
     this.refresh();
   }
@@ -294,8 +293,10 @@ export class Screens {
     const res = this._try(() => p.equip(bagId, slot, weaponId), { ok: false, error: '装备接口不可用' });
     if (res && res.ok) {
       this._click('buy');
-      // 提示打在即将返回的背包屏上（装备成功后会立即切屏）
-      this._notify(`已装备到${name}`, 'ok', this.armReturnCtx === 'select' ? 'bagSelect' : 'backpack');
+      // 提示打在即将返回的背包屏上（装备成功后会立即切屏）；写盘失败必须如实说明，不能报绿色成功
+      const target = this.armReturnCtx === 'select' ? 'bagSelect' : 'backpack';
+      if (res.saved === false) this._notify(`已装备到${name}，但${NO_SAVE_TIP}`, 'warn', target);
+      else this._notify(`已装备到${name}`, 'ok', target);
       this.openBackpack({ context: this.armReturnCtx });
       return;
     }
@@ -307,11 +308,11 @@ export class Screens {
     const input = this.screens.personal && this.screens.personal.querySelector('[data-role=nick]');
     if (!p) { this._notify('档案尚未就绪，请稍后再试', 'bad'); return; }
     const name = String((input && input.value) || '').trim() || DEFAULT_NICK;
-    const ok = this._try(() => p.setNickname(name), false);
+    const res = this._try(() => p.setNickname(name), { ok: false, saved: false });
     if (input && input.value !== name) input.value = name;
-    if (ok && p.available === false) this._notify(`${name} · ${NO_SAVE_TIP}`, 'warn');
-    else if (ok) this._notify(`昵称已保存：${name}`, 'ok');
-    else if (p.available === false) this._notify(NO_SAVE_TIP, 'warn');
+    if (res && res.ok && res.saved === false) this._notify(`${name} 已应用，但${NO_SAVE_TIP}`, 'warn');
+    else if (res && res.ok) this._notify(`昵称已保存：${name}`, 'ok');
+    else if (res && res.error) this._notify(`昵称保存失败：${res.error}`, 'bad');
     else this._notify('昵称保存失败', 'bad');
     this.refresh();
   }

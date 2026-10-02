@@ -48,23 +48,29 @@ for (const id of IDS) {
   report.fpv[id] = 'ok';
 }
 
-// 3) 性能：稳定后采样 2 秒。渲染走 composer（多趟 pass），autoReset 会在每趟 pass 重置计数，
-//    这里关掉 autoReset、手动 reset 后累积统计，再按帧数平均，才能反映真实每帧开销。
+// 3) 性能：稳定后采样 2 秒。两个坑：
+//    - 渲染走 composer（多趟 pass），autoReset 会在每趟 pass 重置计数，这里关掉 autoReset、手动 reset 后累积统计；
+//    - `game.frame` 还被 traceBullet/melee 当作射线帧计数用，不能当渲染帧数，所以用独立的 rAF 计数。
 const perf = await page.evaluate(async () => {
   const g = window.__game;
   const r = g.renderer.renderer;
   r.info.autoReset = false;
   r.info.reset();
-  const f0 = g.frame;
+  let frames = 0;
   const t0 = performance.now();
-  await new Promise((res) => setTimeout(res, 2000));
+  await new Promise((res) => {
+    const tick = () => {
+      frames++;
+      if (performance.now() - t0 < 2000) requestAnimationFrame(tick); else res();
+    };
+    requestAnimationFrame(tick);
+  });
   const dt = (performance.now() - t0) / 1000;
-  const frames = Math.max(1, g.frame - f0);
   const out = {
     fps: +(frames / dt).toFixed(1),
     frames,
-    callsPerFrame: +(r.info.render.calls / frames).toFixed(1),
-    trisPerFrame: Math.round(r.info.render.triangles / frames),
+    callsPerFrame: +(r.info.render.calls / Math.max(1, frames)).toFixed(1),
+    trisPerFrame: Math.round(r.info.render.triangles / Math.max(1, frames)),
     geometries: r.info.memory.geometries,
     textures: r.info.memory.textures,
     programs: r.info.programs ? r.info.programs.length : null,
@@ -75,22 +81,34 @@ const perf = await page.evaluate(async () => {
 });
 report.perf = perf;
 
-// 4) 资源增长：反复换枪与重新开局后不应持续增长
+// 4) 资源增长：反复换枪 + 反复重新开局都不应持续增长
 const growth = await page.evaluate(async () => {
   const g = window.__game, r = g.renderer.renderer;
-  const before = { geometries: r.info.memory.geometries, textures: r.info.memory.textures };
+  const snap = () => ({ geometries: r.info.memory.geometries, textures: r.info.memory.textures });
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const before = snap();
   for (let i = 0; i < 6; i++) {
     for (const id of Object.keys(g.hud.icons)) { try { g.vm.equip(id, 0.001); } catch (e) { /* 忽略 */ } }
   }
   g.hud.setIcons(g.makeIcons());
-  await new Promise((res) => setTimeout(res, 300));
-  return { before, after: { geometries: r.info.memory.geometries, textures: r.info.memory.textures } };
+  await sleep(300);
+  const afterSwaps = snap();
+  // 反复退出到主页再开一局，检查场景/角色/图标重建是否漏释放
+  for (let i = 0; i < 3; i++) {
+    g.quitToMenu();
+    await sleep(250);
+    g.startTeamMatch();
+    await sleep(700);
+  }
+  const afterRematch = snap();
+  return { before, afterSwaps, afterRematch };
 });
 report.growth = growth;
 
 fs.writeFileSync(`${DIR}/${TAG}-report.json`, JSON.stringify(report, null, 2));
-console.log(`[${TAG}] fps=${perf.fps} 每帧 draw calls=${perf.callsPerFrame} 三角面=${perf.trisPerFrame} geo=${perf.geometries} tex=${perf.textures}`);
-console.log(`[${TAG}] 换枪6轮后 geo ${growth.before.geometries} -> ${growth.after.geometries}, tex ${growth.before.textures} -> ${growth.after.textures}`);
+console.log(`[${TAG}] 帧数=${perf.frames} fps=${perf.fps} 每帧 draw calls=${perf.callsPerFrame} 三角面=${perf.trisPerFrame} geo=${perf.geometries} tex=${perf.textures}`);
+console.log(`[${TAG}] 换枪6轮后 geo ${growth.before.geometries} -> ${growth.afterSwaps.geometries}, tex ${growth.before.textures} -> ${growth.afterSwaps.textures}`);
+console.log(`[${TAG}] 重新开局3轮后 geo ${growth.afterSwaps.geometries} -> ${growth.afterRematch.geometries}, tex ${growth.afterSwaps.textures} -> ${growth.afterRematch.textures}`);
 console.log(`[${TAG}] 图标: ${Object.keys(icons).join(', ')}`);
 if (errs.length) { console.log('控制台错误：'); [...new Set(errs)].forEach((e) => console.log('  ' + e.slice(0, 160))); }
 await browser.close();

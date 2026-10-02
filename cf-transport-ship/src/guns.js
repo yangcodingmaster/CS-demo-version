@@ -379,7 +379,7 @@ const builders = {
     g.add(mag);
     anchor(g, 'grip', 0, -0.045, 0.01);
     anchor(g, 'fore', -0.02, -0.04, -0.01);
-    anchor(g, 'muzzle', 0, 0.06, -0.185);
+    anchor(g, 'muzzle', 0, 0.06, -0.1465);
     anchor(g, 'eject', 0.024, 0.064, -0.01);
     anchor(g, 'magwell', 0, -0.093, 0.01);
     return g;
