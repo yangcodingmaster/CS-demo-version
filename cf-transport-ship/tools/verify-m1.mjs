@@ -1,5 +1,7 @@
 // M1 验收：用 playwright-core 驱动本机 Chrome，检查 M1 的存储、配装、输入屏蔽与界面表现
 // 运行：node tools/verify-m1.mjs
+//   M1_ONLY=functional,storage,rules,ui,mobile   只跑指定分段
+//   M1_MOBILE=1                                  额外跑手机竖屏/横屏分段（自 2026-10-02 起手机端不作为验收项，默认跳过）
 // 前置：8000 端口已有 `python3 -m http.server 8000 --bind 127.0.0.1 --directory dist`，且 dist 为最新构建
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
@@ -410,7 +412,8 @@ async function main() {
   const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'] });
   const errs = [];
   const only = (process.env.M1_ONLY || '').split(',').filter(Boolean);
-  const want = (n) => !only.length || only.includes(n);
+  const mobileOn = process.env.M1_MOBILE === '1' || only.includes('mobile');
+  const want = (n) => (!only.length || only.includes(n)) && (n !== 'mobile' || mobileOn);
   try {
     if (want('functional')) await functional(browser, errs);
     if (want('storage')) await storage(browser, errs);

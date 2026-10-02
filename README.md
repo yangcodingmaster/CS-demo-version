@@ -63,7 +63,7 @@ npm test                      # 档案校验、迁移与回退（node:test，无
 node tools/verify-m1.mjs      # 需要 8000 端口的静态预览在运行
 ```
 
-`tools/verify-m1.mjs` 用 playwright-core 驱动本机 Chrome，覆盖主页到对局的界面链路、输入屏蔽、换包不刷弹、团队规则回归，以及 390×844 竖屏与 844×390 横屏布局，截图落在 `tools/shots/`。
+`tools/verify-m1.mjs` 用 playwright-core 驱动本机 Chrome，覆盖主页到对局的界面链路、输入屏蔽、换包不刷弹、团队规则回归。自 2026-10-02 起手机端不作为开发与验收项，脚本默认跳过手机分段，需要时用 `M1_MOBILE=1` 打开；截图落在 `tools/shots/`。
 
 ## 开发规划
 
