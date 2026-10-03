@@ -231,7 +231,11 @@ export class Soldier {
   }
   setWeapon(id) {
     if (this.gunId === id) return;
-    if (this.gun) this.B.chest.remove(this.gun);
+    if (this.gun) {
+      this.B.chest.remove(this.gun);
+      // 合并枪械的几何体是每次构建独占的，换枪时释放，避免反复换枪持续占用显存
+      this.gun.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    }
     this.gunId = id;
     this.gun = buildGunMerged(id);
     // 枪挂在胸骨上，保证瞄准方向稳定

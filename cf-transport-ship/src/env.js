@@ -284,7 +284,8 @@ export class Environment {
     this.scene.environment = this.envRT.texture;
     this.scene.environmentIntensity = this.preset.envInt;
     for (const s of this.extraScenes || []) s.environment = this.envRT.texture;
-    sky2.material.dispose(); disk.geometry.dispose(); disk.material.dispose();
+    // Sky 自带 BoxGeometry，材质/几何体都要释放，否则每次 apply（每局开局）都会留下一个几何体
+    sky2.material.dispose(); sky2.geometry.dispose(); disk.geometry.dispose(); disk.material.dispose();
   }
   update(dt, t, camPos) {
     this.shipDist += dt * this.shipSpeed;

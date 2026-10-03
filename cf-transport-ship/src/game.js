@@ -138,10 +138,8 @@ export class Game {
   startMatch() {
     const o = this.opts;
     audio.init(); audio.setVolumes({ master: o.vol }); audio.startAmbient(); audio.playUI('start');
-    for (const a of this.actors) this.renderer.scene.remove(a.soldier.root);
-    for (const t of this.tags) this.renderer.scene.remove(t.sprite);
-    for (const n of this.nades) this.renderer.scene.remove(n.mesh);
-    this.actors = []; this.nades = []; this.tags = []; this.timers = [];
+    this.clearMatchObjects();
+    this.timers = [];
     this.score = { BL: 0, GR: 0 };
     this.goal = o.goal; this.timeLeft = 600;
     this.env.apply(o.tod);
@@ -182,6 +180,33 @@ export class Game {
     this.lock();
     setTimeout(() => audio.announce('Go go go!'), 400);
     this.hud.toast(`团队竞技 · 率先达到 <b style="color:#f5b321">${this.goal}</b> 击杀的队伍获胜`, 3.5);
+  }
+  // 释放一局独占的 GPU 资源：名牌纹理与材质、机器人的合并枪械几何体、投掷物网格。
+  // 士兵本体几何体按队伍缓存、枪械材质由 gunMaterials() 缓存，都是全局共享，不能在这里释放。
+  clearMatchObjects() {
+    const scene = this.renderer.scene;
+    for (const t of this.tags) {
+      const sp = t.sprite;
+      if (!sp) continue;
+      if (sp.material) { if (sp.material.map) sp.material.map.dispose(); sp.material.dispose(); }
+      scene.remove(sp);
+    }
+    this.tags = [];
+    for (const a of this.actors) {
+      if (!a.soldier) continue;
+      const s = a.soldier;
+      if (s.gun) s.gun.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      // 士兵几何体按队伍缓存、贴图由 atlas() 缓存，二者共享不能释放；
+      // 材质与骨架（骨骼贴图）是每个实例独占的，必须释放，否则每局都会留下 GPU 纹理
+      if (s.mesh && s.mesh.skeleton) s.mesh.skeleton.dispose();
+      if (s.material) s.material.dispose();
+      scene.remove(s.root);
+    }
+    this.actors = [];
+    for (const n of this.nades) {
+      if (n.mesh) { if (n.mesh.geometry) n.mesh.geometry.dispose(); scene.remove(n.mesh); }
+    }
+    this.nades = [];
   }
   addTag(b) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 48;
@@ -253,9 +278,8 @@ export class Game {
     this.playing = false; this.paused = false; this.ended = true;
     this.closeBagPanel(true);
     audio.stopAmbient(); audio.setLowHealth(false);
-    for (const a of this.actors) this.renderer.scene.remove(a.soldier.root);
-    for (const t of this.tags) this.renderer.scene.remove(t.sprite);
-    this.actors = []; this.tags = [];
+    this.clearMatchObjects();
+    this.timers = [];
     this.player = null;
     this.vm.setVisible(false);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -346,6 +370,10 @@ export class Game {
   }
   endMatch() {
     this.ended = true; this.playing = false;
+    // 结算时统一收起局内面板：否则背包面板会盖住结算页与「返回主页」按钮
+    this.closeBagPanel(true);
+    if (this.screens) this.screens.show(null);
+    this.hud.scoreboard(false);
     const my = this.player.team, other = my === 'BL' ? 'GR' : 'BL';
     const win = this.score[my] === this.score[other] ? null : this.score[my] > this.score[other];
     this.hud.endScreen(win, this.score, this.actors, this.player.id);

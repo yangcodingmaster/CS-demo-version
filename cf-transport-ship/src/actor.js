@@ -58,7 +58,9 @@ export class Actor {
     this.hp = 100; this.armor = 100; this.alive = true; this.deadT = 0;
     this.crouch = false; this.height = STAND_H; this.eyeH = EYE_STAND;
     this.protectT = 3; this.onGround = true;
-    // 出生与复活是唯一重新生成弹药和投掷物的时机
+    // 出生与复活是唯一重新生成弹药和投掷物的时机；
+    // 同时清掉上一条命残留的投掷与开镜状态，避免复活后把新手雷自动投出去
+    this.pendingThrow = 0; this.autoSwitchAt = 0; this.reScope = 0;
     this.giveLoadout(this.nextLoadout || this.loadout || this.primary);
     if (this.pendingBagId) { this.activeBagId = this.pendingBagId; this.pendingBagId = null; }
     this.nextLoadout = null;

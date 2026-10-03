@@ -51,12 +51,15 @@ export class Player extends Actor {
   update(dt) {
     const g = this.game, K = this.keys;
     if (g.uiBlocking()) {
-      // 暂停 / 局内背包面板：不做视角、移动、开火与切枪，只允许 B 关闭背包面板
+      // 暂停 / 局内背包面板：只屏蔽操作输入，物理照常跑（重力、碰撞、落地、站立高度），
+      // 否则跳跃中开背包会悬停在空中，而机器人和对局时间仍在继续。
       if (this.consumePressed('KeyB')) g.toggleLoadout();
       this.pressed.clear();
       this.mouse.dx = this.mouse.dy = this.mouse.wheel = 0;
       this.mouse.l = this.mouse.r = this.mouse.lp = this.mouse.rp = false;
+      this.touch.mx = this.touch.mz = 0; this.touch.fire = this.touch.firePressed = false;
       this.lookDX = this.lookDY = 0;
+      if (this.alive) this.move(dt, 0, 0, false, this.crouch, this.walk);
       this.updateCamera(dt);
       return;
     }
