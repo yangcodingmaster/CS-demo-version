@@ -60,14 +60,14 @@ AGENTS.md               开发边界与验证约定
 ```bash
 cd cf-transport-ship
 npm test                      # 档案校验、迁移与回退（node:test，无第三方依赖）
-node tools/verify-m1.mjs      # 需要 8000 端口的静态预览在运行
+node tools/verify-game.mjs      # 需要 8000 端口的静态预览在运行
 ```
 
-`tools/verify-m1.mjs` 用 playwright-core 驱动本机 Chrome，覆盖主页到对局的界面链路、输入屏蔽、换包不刷弹、团队规则回归。自 2026-10-02 起手机端不作为开发与验收项，脚本默认跳过手机分段，需要时用 `M1_MOBILE=1` 打开；截图落在 `tools/shots/`。
+`tools/verify-game.mjs` 用 playwright-core 驱动本机 Chrome，覆盖主页到对局的界面链路、输入屏蔽、换包不刷弹、团队规则回归。自 2026-10-02 起手机端不作为开发与验收项，脚本默认跳过手机分段，需要时用 `M1_MOBILE=1` 打开；截图落在 `tools/shots/`。
 
 ## 开发规划
 
-主页、武器库与三背包、CF 沙漠灰爆破、枪械精修和新增装备的已确认方向及分阶段验收，见 [游戏开发规格](cf-transport-ship/docs/game-design.md)。M1（主页、背包、运输船）已实现并验收，爆破模式、新增副武器与战术投掷物仍待后续阶段实施。
+主页、武器库与三背包、CF 沙漠灰爆破、枪械精修和新增装备的已确认方向及分阶段验收，见 [游戏开发规格](cf-transport-ship/docs/game-design.md)。M1（主页、背包、运输船）与 M1B（枪械精修、USP / Glock-18）已实现并验收，副武器现有沙漠之鹰、USP 与 Glock-18 三种；爆破模式、闪光弹与烟雾弹仍待后续阶段实施。
 
 交给开发 Agent 时，从 [CF 开发协作说明](cf-transport-ship/AGENTS.md) 开始；装备与项目默认参数见 [设计数据](cf-transport-ship/docs/design-data.json)。
 

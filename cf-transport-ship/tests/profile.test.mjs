@@ -62,10 +62,10 @@ test("2. 旧 cf_ship_opts.primary='mp5' 迁移到 bag-1.primary", () => {
   assert.equal(again.getBackpack('bag-1').primary, 'ak47');
   assert.equal(again.data.nickname, '老兵');
 
-  // 旧值不可装备时不迁移，只记 notes
-  const { p: bad } = open({ [LEGACY_KEY]: JSON.stringify({ primary: 'usp' }) });
+  // 旧值不可装备时不迁移，只记 notes（M3 的闪光弹尚未实现）
+  const { p: bad } = open({ [LEGACY_KEY]: JSON.stringify({ primary: 'flash' }) });
   assert.equal(bad.getBackpack('bag-1').primary, 'ak47');
-  assert.ok(bad.notes.some((n) => n.includes('usp')));
+  assert.ok(bad.notes.some((n) => n.includes('flash')));
 });
 
 test('3. 损坏 JSON 回退默认且不抛异常', () => {
@@ -88,7 +88,7 @@ test('4. 未知武器 ID 只回退该槽，其它槽保留原值', () => {
   const raw = {
     schemaVersion: 1, nickname: '我', selectedBackpackId: 'bag-1',
     backpacks: [
-      { id: 'bag-1', name: '背包1', primary: 'usp', secondary: 'deagle', melee: 'knife', throwable: 'he' },
+      { id: 'bag-1', name: '背包1', primary: 'flash', secondary: 'deagle', melee: 'knife', throwable: 'he' },
       { id: 'bag-2', name: '背包2', primary: 'mp5', secondary: 'deagle', melee: 'knife', throwable: 'flash' },
       { id: 'bag-3', name: '背包3', primary: 'awm', secondary: 'deagle', melee: 'knife', throwable: 'smoke' },
     ],
@@ -104,11 +104,11 @@ test('4. 未知武器 ID 只回退该槽，其它槽保留原值', () => {
   assert.equal(profile.backpacks[1].throwable, 'he');
   assert.equal(profile.backpacks[2].primary, 'awm');
   assert.equal(profile.backpacks[2].throwable, 'he');
-  assert.ok(notes.includes('bag-1.primary 未知 ID usp，回退 ak47'));
+  assert.ok(notes.includes('bag-1.primary 未知 ID flash，回退 ak47'));
   assert.ok(notes.some((n) => n.includes('bag-2.throwable') && n.includes('flash')));
   assert.ok(notes.some((n) => n.includes('bag-3.throwable') && n.includes('smoke')));
   const dump = JSON.stringify(profile);
-  for (const id of ['usp', 'glock18', 'flash', 'smoke']) assert.ok(!dump.includes(id), `${id} 不得写进档案`);
+  for (const id of ['flash', 'smoke']) assert.ok(!dump.includes(id), `${id} 不得写进档案`);
 
   const { p } = open(stored(raw));
   assert.equal(p.getBackpack('bag-1').primary, 'ak47');
@@ -156,8 +156,8 @@ test('6. 类别不符时 equip 返回 ok:false 且不改动数据', () => {
   assert.equal(p.equip('bag-1', 'primary', 'deagle').ok, false, '副武器不能装主武器槽');
   assert.equal(p.equip('bag-1', 'secondary', 'awm').ok, false);
   assert.equal(p.equip('bag-1', 'melee', 'he').ok, false);
-  assert.equal(p.equip('bag-1', 'primary', 'usp').ok, false, '未实现装备不能装备');
-  assert.equal(p.equip('bag-1', 'throwable', 'flash').ok, false);
+  assert.equal(p.equip('bag-1', 'primary', 'usp').ok, false, '副武器不能装主武器槽');
+  assert.equal(p.equip('bag-1', 'throwable', 'flash').ok, false, '未实现装备不能装备');
   assert.equal(p.equip('bag-9', 'primary', 'ak47').ok, false, '背包不存在');
   assert.equal(p.equip('bag-1', 'bad', 'ak47').ok, false, '槽位无效');
   assert.equal(JSON.stringify(p.data), before, '失败调用不得改动数据');
@@ -167,6 +167,10 @@ test('6. 类别不符时 equip 返回 ok:false 且不改动数据', () => {
   assert.equal(p.getBackpack('bag-1').primary, 'mp5');
   assert.equal(JSON.parse(s.dump(PROFILE_KEY)).backpacks[0].primary, 'mp5', '成功装备立即保存');
   assert.equal(p.equip('bag-1', 'secondary', 'deagle').ok, true, '同值重复装备也算成功');
+  assert.equal(p.equip('bag-1', 'secondary', 'usp').ok, true, 'M1B 新枪可以装备');
+  assert.equal(p.getBackpack('bag-1').secondary, 'usp');
+  assert.equal(p.equip('bag-1', 'secondary', 'glock18').ok, true);
+  assert.equal(p.getBackpack('bag-1').secondary, 'glock18');
   assert.deepEqual(p.equip('bag-1', 'melee', 'knife'), { ok: true });
 });
 
@@ -238,11 +242,19 @@ test('9. getLoadout 四个值都在 WEAPONS 里且槽位类别正确', () => {
   }
   assert.deepEqual(p.getLoadout(), p.getLoadout(p.data.selectedBackpackId));
   assert.deepEqual(weaponsForSlot('primary'), ['ak47', 'm4a1', 'awm', 'mp5']);
-  assert.deepEqual(weaponsForSlot('secondary'), ['deagle']);
+  assert.deepEqual(weaponsForSlot('secondary'), ['deagle', 'usp', 'glock18']);
   assert.deepEqual(weaponsForSlot('melee'), ['knife']);
   assert.deepEqual(weaponsForSlot('throwable'), ['he']);
   assert.deepEqual(weaponsForSlot('nope'), []);
-  for (const id of ['usp', 'glock18', 'flash', 'smoke']) {
+  // M1B 之后副武器有三件，且只能装在副武器槽
+  for (const id of ['usp', 'glock18']) {
+    assert.equal(slotOfWeapon(id), 'secondary');
+    assert.equal(isEquippable(id, 'secondary'), true);
+    assert.equal(isEquippable(id, 'primary'), false);
+    assert.equal(isEquippable(id, 'throwable'), false);
+  }
+  // 闪光弹与烟雾弹属 M3，仍未实现
+  for (const id of ['flash', 'smoke']) {
     assert.equal(slotOfWeapon(id), null, `${id} 尚未实现`);
     assert.equal(isEquippable(id, 'secondary'), false);
     assert.equal(isEquippable(id, 'primary'), false);

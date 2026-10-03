@@ -1,6 +1,7 @@
 // 第一人称武器与手臂
 import * as THREE from 'three';
 import { buildGun, gunMaterials } from './guns.js';
+import { WEAPONS } from './weapons.js';
 
 const HIP = {
   ak47: { p: [0.165, -0.175, -0.55], r: [0.045, 0.165, 0.02] },
@@ -8,10 +9,25 @@ const HIP = {
   awm: { p: [0.17, -0.185, -0.6], r: [0.04, 0.15, 0.02] },
   mp5: { p: [0.155, -0.165, -0.5], r: [0.05, 0.17, 0.02] },
   deagle: { p: [0.085, -0.115, -0.4], r: [0.05, 0.1, 0] },
+  usp: { p: [0.085, -0.115, -0.4], r: [0.05, 0.1, 0] },
+  glock18: { p: [0.09, -0.125, -0.42], r: [0.05, 0.11, 0] },
   knife: { p: [0.17, -0.15, -0.34], r: [0.35, -0.25, 0.55] },
   he: { p: [0.13, -0.12, -0.3], r: [0.1, -0.2, 0.2] },
 };
-const KICK = { ak47: [0.04, 0.07], m4a1: [0.032, 0.05], awm: [0.09, 0.2], mp5: [0.024, 0.035], deagle: [0.05, 0.22] };
+const KICK = {
+  ak47: [0.04, 0.07], m4a1: [0.032, 0.05], awm: [0.09, 0.2], mp5: [0.024, 0.035],
+  deagle: [0.05, 0.22], usp: [0.038, 0.16], glock18: [0.028, 0.12],
+};
+
+// 类别判据：优先 weapons.js 的 type，其次显式 id 集合（集成 Agent 写入新枪数据前后都成立）
+const PISTOL_IDS = new Set(['deagle', 'usp', 'glock18']);
+const wtype = (id) => (WEAPONS[id] && WEAPONS[id].type) || (PISTOL_IDS.has(id) ? 'pistol' : '');
+const pick = (table, id, dflt) => table[id] ?? table[wtype(id)] ?? dflt;
+// 枪口火焰缩放：集中的类别表（单枪覆盖优先），调整只改这一处
+const FLASH_SCALE = { pistol: 1.2, usp: 1.0, glock18: 0.95, awm: 1.6, mp5: 0.8, deagle: 1.2 };
+// 滑套后坐时长 / 空仓换弹末尾的套筒释放行程：按类别取值
+const SLIDE_KICK = { pistol: 0.09 };
+const SLIDE_RELEASE = { pistol: 0.03 };
 
 const ease = (t) => t * t * (3 - 2 * t);
 const seg = (f, a, b) => Math.min(1, Math.max(0, (f - a) / (b - a)));
@@ -87,6 +103,7 @@ export class ViewModel {
     this.drawT = 1; this.drawDur = 0.5;
     this.anim = null; // {type, t, dur, empty, heavy}
     this.flashT = 0;
+    this.slideT = 0;
     this.setTeam(team);
     this.visible = true;
   }
@@ -101,7 +118,7 @@ export class ViewModel {
       g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
       this.guns[id] = g;
     }
-    if (this.cur) this.holder.remove(this.cur);
+    if (this.cur) { this.resetParts(); this.holder.remove(this.cur); } // 收枪前把零件归位，避免动画中断后静止位置被记成新基准
     this.cur = this.guns[id]; this.id = id;
     this.holder.add(this.cur);
     this.cur.visible = true;
@@ -113,6 +130,7 @@ export class ViewModel {
     if (mz) { mz.add(this.flash); }
     this.drawT = 0; this.drawDur = drawTime || 0.5;
     this.anim = null;
+    this.slideT = 0;
     this.kick = this.kickV = this.kickRot = this.kickRotV = 0;
   }
   fire() {
@@ -122,11 +140,12 @@ export class ViewModel {
     this.flash.visible = true;
     this.flashFront.material.map = this.flashTex[(Math.random() * 3) | 0];
     this.flashFront.rotation.z = Math.random() * Math.PI;
-    const sc = this.id === 'awm' ? 1.6 : this.id === 'deagle' ? 1.2 : this.id === 'mp5' ? 0.8 : 1;
+    const sc = pick(FLASH_SCALE, this.id, 1);
     this.flash.scale.setScalar(sc * (0.8 + Math.random() * 0.45));
     if (this.id !== 'awm') this.ejectShell();
     else this.anim = { type: 'bolt', t: 0, dur: 1.3 };
-    if (this.id === 'deagle' && this.parts.slide) this.slideT = 0.09;
+    // 滑套后坐：按能力判断（凡是有 slide 部件的枪都触发），不按 id 硬编码
+    if (this.parts.slide) this.slideT = pick(SLIDE_KICK, this.id, 0.09);
   }
   ejectShell() {
     const an = this.parts.eject;
@@ -179,7 +198,11 @@ export class ViewModel {
     const P = this.parts, R = this.partRest;
     let handL = null; // 左手目标（相机空间）
     let handROverride = null;
-    if (this.slideT > 0 && P.slide) { this.slideT -= dt; P.slide.position.z = R.slide.p.z + Math.max(0, this.slideT) * 0.5; }
+    if (this.slideT > 0 && P.slide) {
+      // 滑套后坐（有 slide 部件即适用），结束时精确归位
+      this.slideT = Math.max(0, this.slideT - dt);
+      P.slide.position.z = R.slide.p.z + this.slideT * 0.5;
+    }
     const a = this.anim;
     if (a) {
       a.t += dt;
@@ -205,7 +228,12 @@ export class ViewModel {
           if (id === 'ak47') handL = bw;
           rz -= pull * 0.1;
         } else if (P.bolt && R.bolt) P.bolt.position.z = R.bolt.p.z;
-        if (id === 'deagle' && P.slide && a.empty && f > 0.8 && f < 0.9) P.slide.position.z = R.slide.p.z + 0.03;
+        // 空仓换弹末尾释放套筒：按能力判断（有 slide 部件 + 空仓），行程按类别取
+        if (P.slide && a.empty && f > 0.8 && f < 0.9) {
+          P.slide.position.z = R.slide.p.z + pick(SLIDE_RELEASE, id, 0.03);
+          P.slide.updateWorldMatrix(true, false);
+          handL = P.slide.getWorldPosition(new THREE.Vector3()); // 左手跟到套筒
+        }
       } else if (a.type === 'bolt' && P.bolt) {
         const f2 = seg(f, 0.15, 0.85);
         const up = ease(seg(f2, 0, 0.2)) * (1 - ease(seg(f2, 0.8, 1)));
@@ -269,7 +297,7 @@ export class ViewModel {
     const E = this.elbow[s].clone();
     const hp = (HIP[this.id] || HIP.ak47).p;
     E.x += (this.holder.position.x - hp[0]) * 0.6; E.y += (this.holder.position.y - hp[1]) * 0.6; E.z += (this.holder.position.z - hp[2]) * 0.5;
-    if (this.id === 'deagle' && s === 'L') E.set(0.0, -0.46, -0.3);
+    if (s === 'L' && wtype(this.id) === 'pistol') E.set(0.0, -0.46, -0.3); // 手枪：左手托握肘位更靠内
     const dir = handPos.clone().sub(E);
     const L = dir.length(); dir.normalize();
     const back = handPos.clone().addScaledVector(dir, -0.05);

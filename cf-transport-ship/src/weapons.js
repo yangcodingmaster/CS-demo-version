@@ -40,6 +40,23 @@ export const WEAPONS = {
     recoil: { up: 0.03, upMax: 0.09, side: 0.008, sideStart: 1, recover: 5 },
     sound: 'deagle', hudName: 'DESERT EAGLE',
   },
+  // M1B 新增副武器：参数是本项目设计值（试玩后可调），不改动已有武器数值
+  usp: {
+    id: 'usp', name: 'USP', slot: 1, type: 'pistol', auto: false,
+    dmg: 34, headMul: 3.6, limbMul: 0.8, rpm: 300, mag: 12, reserve: 48, reload: 2.0, draw: 0.5,
+    speed: 1.02, range: 130, falloff: 0.975, pen: 0.7, armorPen: 0.62,
+    spread: { base: 0.0032, move: 0.045, air: 0.17, crouch: 0.65, perShot: 0.011, max: 0.05, recover: 6.5 },
+    recoil: { up: 0.017, upMax: 0.055, side: 0.005, sideStart: 2, recover: 6 },
+    sound: 'usp', hudName: 'USP',
+  },
+  glock18: {
+    id: 'glock18', name: 'Glock-18', slot: 1, type: 'pistol', auto: false,
+    dmg: 26, headMul: 3.4, limbMul: 0.82, rpm: 420, mag: 17, reserve: 51, reload: 2.05, draw: 0.48,
+    speed: 1.05, range: 110, falloff: 0.972, pen: 0.55, armorPen: 0.5,
+    spread: { base: 0.0042, move: 0.03, air: 0.15, crouch: 0.7, perShot: 0.0075, max: 0.055, recover: 8 },
+    recoil: { up: 0.0095, upMax: 0.045, side: 0.0042, sideStart: 3, recover: 8.5 },
+    sound: 'glock18', hudName: 'GLOCK-18',
+  },
   knife: {
     id: 'knife', name: '军刀', slot: 2, type: 'melee', auto: true,
     dmgLight: 52, dmgHeavy: 100, rangeLight: 1.9, rangeHeavy: 1.6, rateLight: 0.42, rateHeavy: 1.05, draw: 0.4,

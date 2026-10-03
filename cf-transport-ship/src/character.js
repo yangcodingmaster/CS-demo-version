@@ -2,6 +2,11 @@
 import * as THREE from 'three';
 import { buildGunMerged } from './guns.js';
 import { fbm } from './textures.js';
+import { WEAPONS } from './weapons.js';
+
+// 持枪姿势按 weapons.js 的类别判断；PISTOLS 只在数据还没写入时的兜底集合
+const PISTOLS = new Set(['deagle', 'usp', 'glock18']);
+const isPistol = (id) => (WEAPONS[id] ? WEAPONS[id].type === 'pistol' : PISTOLS.has(id));
 
 let ATLAS = null;
 function atlas() {
@@ -302,7 +307,8 @@ export class Soldier {
     this.recoilK *= Math.exp(-dt * 12);
     // 枪相对胸骨
     if (this.gun) {
-      const sniper = this.gunType === 'awm', pistol = this.gunType === 'deagle', knife = this.gunType === 'knife' || this.gunType === 'he';
+      // 持枪类别按武器数据判断，新增手枪不用再改这里
+      const sniper = this.gunType === 'awm', pistol = isPistol(this.gunType), knife = this.gunType === 'knife' || this.gunType === 'he';
       const gx = pistol ? 0.03 : 0.1, gy = pistol ? 0.14 : 0.1, gz = pistol ? -0.42 : -0.3;
       this.gun.position.set(gx, gy + (st.reloading ? -0.08 : 0), gz + this.recoilK * 0.05);
       this.gun.rotation.set(st.reloading ? -0.5 : 0, 0.37, st.reloading ? 0.4 : 0);
