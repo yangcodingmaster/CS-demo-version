@@ -14,6 +14,8 @@ import { buildGunMerged } from './guns.js';
 import { Player } from './player.js';
 import { Bot, BOT_NAMES } from './bots.js';
 import { TouchControls } from './touch.js';
+import { Profile } from './profile.js';
+import { Screens } from './screens.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const MULTI = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'MULTI KILL', 'ULTRA KILL', 'RAMPAGE', 'UNSTOPPABLE', 'GODLIKE'];
@@ -28,10 +30,15 @@ export class Game {
     this.score = { BL: 0, GR: 0 };
     this.audio = audio;
     this.qs = new URLSearchParams(location.search);
+    this.startBagId = null;      // 初始背包选择屏的一次性覆盖，消费后回落到档案默认背包
   }
   async init() {
     this.hud = new HUD(this);
     this.opts = this.hud.opts;
+    this.profile = new Profile();
+    this.profile.load();
+    this.screens = new Screens(this);
+    this.settingsReturn = 'home';
     if (this.qs.get('q')) this.opts.quality = this.qs.get('q');
     this.hud.show('loading');
     this.hud.loading(0.05, '初始化渲染器');
@@ -59,20 +66,22 @@ export class Game {
     this.hud.buildRadar(this.world);
     this.hud.loading(0.88, '武器图标 / 预编译着色器');
     await nextFrame();
-    this.hud.setIcons(this.makeIcons());
+    const icons = this.makeIcons();
+    this.hud.setIcons(icons);
+    this.screens.setIcons(icons);
     this.lampLights();
     this.renderer.camera.position.set(-20, 12, 30); this.renderer.camera.lookAt(0, 2, 0);
     try { this.renderer.renderer.compile(this.renderer.scene, this.renderer.camera); } catch (e) { /* 忽略 */ }
     this.hud.loading(1, '完成');
     await nextFrame();
-    this.hud.show('menu');
+    this.showHome();
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     this.touch = new TouchControls(this);
     this.touchMode = this.touch.enabled;
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
-    if (this.qs.has('autostart')) setTimeout(() => this.startMatch(), 300);
+    if (this.qs.has('autostart')) setTimeout(() => this.startTeamMatch(), 300);
     window.__game = this;
   }
   lampLights() {
@@ -121,6 +130,11 @@ export class Game {
   }
 
   // ================= 流程 =================
+  // 主页 → 团队模式设置 → 选择初始背包 → 对局
+  startTeamMatch() {
+    this.screens.closeAll();
+    this.startMatch();
+  }
   startMatch() {
     const o = this.opts;
     audio.init(); audio.setVolumes({ master: o.vol }); audio.startAmbient(); audio.playUI('start');
@@ -134,8 +148,14 @@ export class Game {
     const my = o.team, other = my === 'BL' ? 'GR' : 'BL';
     const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
     let id = 0;
-    this.player = new Player(this, { id: id++, name: '我', team: my });
-    this.player.primary = o.primary;
+    // 初始背包：主页选中的背包；没有有效选择时回退到档案默认背包
+    const bag = this.profile.getBackpack(this.startBagId) || this.profile.selectedBackpack;
+    this.startBagId = null;
+    this.inLoadout = false; this.boardShown = false;
+    this.player = new Player(this, { id: id++, name: this.profile.data.nickname || '我', team: my });
+    this.player.activeBagId = bag.id;
+    this.player.loadout = this.profile.getLoadout(bag.id);
+    this.player.pendingBagId = null; this.player.nextLoadout = null;
     this.player.bind(document.getElementById('c'));
     this.actors.push(this.player);
     const N = o.size;
@@ -188,6 +208,7 @@ export class Game {
       }
       if (sc > bestScore) { bestScore = sc; best = p; }
     }
+    const prevBag = a.isPlayer ? a.activeBagId : null;
     a.spawn(best);
     if (a instanceof Bot) a.onSpawn();
     if (a.isPlayer) {
@@ -196,6 +217,11 @@ export class Game {
       this.vm.setVisible(true);
       this.hud.slots(a.inv, a.slot);
       audio.setLowHealth(false);
+      // 复活时待生效背包生效：只在这里给出提示，弹药已由 spawn -> giveLoadout 重建
+      if (!first && a.activeBagId !== prevBag) {
+        const bag = this.profile.getBackpack(a.activeBagId);
+        if (bag) this.hud.toast(`已切换到 <b style="color:#f5b321">${bag.name}</b> · ${WEAPONS[bag.primary].name}`, 2.0);
+      }
     }
   }
   lock() {
@@ -225,6 +251,7 @@ export class Game {
   }
   quitToMenu() {
     this.playing = false; this.paused = false; this.ended = true;
+    this.closeBagPanel(true);
     audio.stopAmbient(); audio.setLowHealth(false);
     for (const a of this.actors) this.renderer.scene.remove(a.soldier.root);
     for (const t of this.tags) this.renderer.scene.remove(t.sprite);
@@ -232,29 +259,83 @@ export class Game {
     this.player = null;
     this.vm.setVisible(false);
     if (document.pointerLockElement) document.exitPointerLock();
-    this.hud.show('menu');
+    this.showHome();
   }
+
+  // ================= 界面流程 =================
+  // 对局界面之外（主页、个人界面、设置、初始背包）统一隐藏对局 HUD
+  showHome() {
+    this.settingsReturn = 'home';
+    this.hud.show(null, { hideHud: true });
+    this.screens.show('home');
+  }
+  showPersonal() {
+    this.settingsReturn = 'personal';
+    this.hud.show(null, { hideHud: true });
+    this.screens.show('personal');
+  }
+  showTeamSetup() {
+    this.settingsReturn = 'home';
+    this.screens.show(null);
+    this.hud.show('menu', { hideHud: true });
+    this.setMenuBackLabel('返回主页');
+  }
+  showSettings() {
+    // 设置屏复用运输船设置，返回目标取决于从哪一屏进来
+    this.settingsReturn = this.screens.visible === 'home' ? 'home' : 'personal';
+    this.screens.show(null);
+    this.hud.show('menu', { hideHud: true });
+    this.setMenuBackLabel(this.settingsReturn === 'personal' ? '返回个人界面' : '返回主页');
+  }
+  setMenuBackLabel(text) {
+    const b = document.getElementById('btnMenuBack');
+    if (b) b.textContent = text;
+  }
+  onMenuBack() { if (this.settingsReturn === 'personal') this.showPersonal(); else this.showHome(); }
+  showBagSelect() {
+    this.hud.show(null, { hideHud: true });
+    this.screens.openBackpack({ context: 'select' });
+  }
+  // 输入屏蔽：非对局、暂停、局内背包面板打开时都不接受操作输入
+  uiBlocking() { return !this.playing || this.paused || this.inLoadout === true; }
+  clearInput() {
+    const p = this.player; if (!p) return;
+    p.keys.clear(); p.pressed.clear();
+    p.mouse.l = p.mouse.r = p.mouse.lp = p.mouse.rp = false;
+    p.mouse.dx = p.mouse.dy = p.mouse.wheel = 0;
+    p.touch.mx = p.touch.mz = 0; p.touch.fire = p.touch.firePressed = false;
+    p.touch.jump = p.touch.crouch = false;
+    if (p.touchLook) p.touchLook.x = p.touchLook.y = 0;
+  }
+  // 局内 B：打开背包面板，选择在下次出生生效（不再有出生区即时换枪）
   toggleLoadout() {
-    if (!this.playing) return;
-    if (this.inLoadout) { this.closeLoadout(); return; }
-    this.inLoadout = true; this.hud.show('loadout');
-    for (const x of document.querySelectorAll('#loadCards .card')) x.classList.toggle('on', x.dataset.w === (this.player.nextPrimary || this.player.primary));
+    if (!this.playing || this.ended) return;
+    if (this.inLoadout) { this.closeBagPanel(); return; }
+    this.inLoadout = true;
+    this.clearInput();
+    this.hud.scoreboard(false);
     if (document.pointerLockElement) document.exitPointerLock();
+    this.screens.openBackpack({ context: 'match' });
   }
-  closeLoadout() {
-    this.inLoadout = false; this.hud.show(null); this.lock();
+  closeBagPanel(silent) {
+    this.inLoadout = false;
+    this.clearInput();
+    if (silent) return;
+    this.screens.show(null);
+    this.hud.show(null);
+    if (this.playing && !this.ended) this.lock();
   }
-  chooseLoadout(id) {
+  // 界面层登记的换包请求：只改「下次出生待生效」，不重新生成弹药或投掷物
+  requestBagChange(bagId) {
     const p = this.player;
-    p.nextPrimary = id; this.opts.primary = id; this.hud.saveOpts();
-    const inSpawn = p.alive && (p.team === 'BL' ? p.pos.x < -28.3 : p.pos.x > 28.3);
-    if (inSpawn) {
-      p.primary = id; p.inv[0] = new (p.inv[0].constructor)(id); p.inv[0].patternSeed = Math.random() * 6;
-      p.slot = 0; p.readyAt = this.time + WEAPONS[id].draw; p.soldier.setWeapon(id);
-      this.vm.equip(id, WEAPONS[id].draw); this.hud.slots(p.inv, 0);
-      this.hud.toast(`已更换为 ${WEAPONS[id].name}`, 1.5);
-    } else this.hud.toast(`复活后使用 ${WEAPONS[id].name}`, 1.5);
+    const bag = this.profile.getBackpack(bagId);
+    if (!p || !bag) return false;
+    if (bagId === p.activeBagId && !p.pendingBagId) { this.hud.toast(`${bag.name} 正在使用中`, 1.6); return true; }
+    const l = this.profile.getLoadout(bagId);
+    p.pendingBagId = bagId; p.nextLoadout = l;
+    this.hud.toast(`下次复活使用 <b style="color:#f5b321">${bag.name}</b> · ${WEAPONS[l.primary].name}`, 2.0);
     audio.playUI('buy');
+    return true;
   }
   onOption(k, v) {
     if (k === 'vol') audio.setVolumes({ master: v });

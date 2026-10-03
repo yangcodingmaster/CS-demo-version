@@ -188,3 +188,109 @@ body.lk #clinks{opacity:.22}
   #ammo .mag{font-size:34px}
   .cards{grid-template-columns:repeat(2,1fr)}
 }
+
+/* ---------- M1：既有 #menu 手机竖屏溢出修正 ----------
+   实测（Chrome，360×640，只加载 style.css + hud.js）：
+   ≤760px 时 .menuBox 变成单列 grid，列宽 1fr = minmax(auto,1fr)，其 auto 最小值由
+   .row3{grid-template-columns:1fr 1fr 1fr} 中的 range 输入最小内容宽度决定，把列撑到 539px
+   （容器只有 345.6px），标题、说明与设置项右侧被裁掉约 205px。只加 .slider input{min-width:0}
+   或只改 .keys 都不生效；把 .row3 列改为可收缩后列宽回到 307.6px。 */
+.row3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.slider input{min-width:0}
+
+/* ---------- M1：主页 / 个人界面 / 背包 / 武器库 ---------- */
+.screen.m1{display:block;overflow-y:auto;overflow-x:hidden;padding:14px 12px 26px;pointer-events:auto;-webkit-overflow-scrolling:touch}
+.m1 .m1Box,.m1 .m1Box *{pointer-events:auto}
+.m1Box{width:100%;max-width:920px;min-width:0;margin:0 auto}
+.m1HomeBox{padding-top:clamp(8px,6vh,54px)}
+.m1Hero{text-align:center;padding:12px 0 14px}
+.m1Logo{font-family:var(--num);font-size:13px;letter-spacing:6px;color:var(--accent)}
+.m1H1{margin:6px 0 3px;font-size:clamp(30px,9vw,54px);letter-spacing:clamp(2px,1.6vw,8px);font-weight:900;line-height:1.06;background:linear-gradient(180deg,#fff,#b9c3cc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.m1En{font-family:var(--num);letter-spacing:4px;color:var(--hudDim);font-size:13px}
+.m1Who{margin-top:10px;font-size:12.5px;color:#aab3bb;line-height:1.7;overflow-wrap:anywhere}
+.m1H2{margin:0;font-size:21px;letter-spacing:4px;font-weight:700;overflow-wrap:anywhere}
+.m1Sub{font-size:12.5px;color:var(--hudDim);letter-spacing:1px;margin-top:3px;overflow-wrap:anywhere}
+.m1Head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+.m1HeadTxt{flex:1 1 150px;min-width:0}
+.m1Lab{font-size:12px;color:var(--hudDim);letter-spacing:2px;margin:14px 0 7px}
+.m1Foot{margin-top:14px;font-size:11.5px;color:#8c959c;line-height:1.7;overflow-wrap:anywhere}
+
+/* 按钮与输入 */
+.m1Btn{display:block;width:100%;min-width:0;min-height:52px;padding:11px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);color:#eef2f5;font-size:15px;letter-spacing:2px;text-align:left;cursor:pointer;transition:background .12s,border-color .12s}
+.m1Btn:hover{background:rgba(255,255,255,.11)}
+.m1Btn b{display:block;font-size:17px;font-weight:700;letter-spacing:3px}
+.m1Btn small{display:block;font-size:11.5px;color:var(--hudDim);letter-spacing:1px;margin-top:3px;overflow-wrap:anywhere}
+.m1Btn.go{background:linear-gradient(180deg,#ffd257,#e59a12);border-color:#ffd257;color:#1a1204}
+.m1Btn.go small{color:rgba(26,18,4,.72)}
+.m1Btn.go:hover{filter:brightness(1.1);background:linear-gradient(180deg,#ffd257,#e59a12)}
+.m1Btn.sec{background:rgba(255,255,255,.08);color:#dfe4e8}
+.m1Btn.small{width:auto;flex:0 0 auto;min-height:44px;padding:10px 16px;font-size:13.5px;text-align:center;letter-spacing:2px}
+.m1Btn.off{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.1);color:#838b92;cursor:not-allowed}
+.m1Btn.off b{color:#959da4}
+.m1Back{flex:0 0 auto;min-height:42px;padding:9px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);color:#dfe4e8;font-size:13.5px;letter-spacing:2px;cursor:pointer}
+.m1Back:hover{background:rgba(255,255,255,.12)}
+.m1Menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:10px}
+.m1Row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.m1Row>.m1Btn{flex:1 1 150px;width:auto}
+.m1Card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);padding:13px}
+.m1Card .m1Lab{margin-top:0}
+.m1NameRow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+.m1Input{flex:1 1 150px;min-width:0;min-height:44px;padding:9px 12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);color:var(--hud);font-family:var(--cn);font-size:16px;user-select:text;-webkit-user-select:text}
+.m1Input:focus{outline:none;border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.m1Hint{font-size:11.5px;color:#8c959c;line-height:1.7;margin-top:8px;overflow-wrap:anywhere}
+.m1Hint.warn{color:var(--accent)}
+.m1State{font-size:12px;line-height:1.7;color:#a9b2ba;background:rgba(245,179,33,.08);border-left:3px solid var(--accent);padding:8px 11px;margin-bottom:12px;overflow-wrap:anywhere}
+
+/* 操作反馈（不用 alert/confirm） */
+.m1Notice{display:none;margin-bottom:12px;padding:9px 12px;font-size:13px;line-height:1.6;border-left:3px solid var(--accent);background:rgba(245,179,33,.14);color:#ffe6ad;overflow-wrap:anywhere}
+.m1Notice.show{display:block}
+.m1Notice.ok{border-left-color:var(--good);background:rgba(124,240,106,.12);color:#d9ffd2}
+.m1Notice.warn{border-left-color:var(--accent);background:rgba(245,179,33,.14);color:#ffe6ad}
+.m1Notice.bad{border-left-color:var(--bad);background:rgba(255,74,58,.16);color:#ffd3ce}
+
+/* 背包卡片 */
+.m1BagGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:10px}
+.m1Bag{min-width:0;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.13);padding:11px;transition:background .12s,border-color .12s}
+.m1Bag.pick{cursor:pointer}
+.m1Bag.pick:hover{background:rgba(255,255,255,.09);border-color:rgba(245,179,33,.5)}
+.m1BagTop{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}
+.m1BagName{font-size:15px;letter-spacing:2px}
+.m1Tags{display:flex;flex-wrap:wrap;gap:5px;margin-left:auto}
+.m1Tag{font-size:11px;letter-spacing:1px;padding:3px 7px;border:1px solid rgba(255,255,255,.2);color:#cfd6dc;background:rgba(255,255,255,.05);white-space:nowrap}
+.m1Tag.on{border-color:var(--good);color:#d9ffd2;background:rgba(124,240,106,.14)}
+.m1Tag.next{border-color:var(--gr2);color:#d6ebff;background:rgba(47,143,240,.22)}
+.m1Tag.home{border-color:var(--accent);color:#ffe6ad;background:rgba(245,179,33,.16)}
+/* 槽位整行排布：卡片较窄时也保证装备名一行显示，名称过长才省略号 */
+.m1Slots{display:flex;flex-direction:column;gap:6px}
+.m1Slot{display:flex;flex:0 0 auto;width:100%;align-items:center;gap:6px;min-width:0;min-height:44px;padding:6px 9px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);cursor:pointer}
+.m1Slot:hover{border-color:rgba(245,179,33,.5);background:rgba(0,0,0,.5)}
+.m1Slot.bad{border-color:rgba(255,74,58,.45)}
+.m1SlotLab{flex:0 0 auto;font-size:10.5px;color:var(--hudDim);letter-spacing:1px}
+.m1SlotName{flex:1 1 auto;min-width:0;font-size:12.5px;color:#e7ecf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m1SlotGo{flex:0 0 auto;font-size:10.5px;color:var(--accent);letter-spacing:1px}
+.m1Thumb{flex:0 0 auto;display:grid;place-items:center;width:48px;height:24px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.14)}
+.m1Thumb img{display:none;width:100%;height:100%;object-fit:contain}
+.m1Thumb img.ready{display:block}
+
+/* 武器库 */
+.m1ArmGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(150px,100%),1fr));gap:10px}
+.m1Arm{position:relative;min-width:0;min-height:120px;padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);cursor:pointer;text-align:center;transition:background .12s,border-color .12s}
+.m1Arm:hover{background:rgba(255,255,255,.1)}
+.m1Arm.on{border-color:var(--accent);background:rgba(245,179,33,.14);box-shadow:inset 0 0 0 1px var(--accent)}
+.m1Arm .m1Thumb.big{width:100%;height:62px;margin:0 auto;background:rgba(0,0,0,.3);border-style:solid;border-color:rgba(255,255,255,.1)}
+.m1ArmName{display:block;margin-top:8px;font-size:14px;letter-spacing:1px;overflow-wrap:anywhere}
+.m1ArmDesc{display:block;margin-top:5px;font-size:11px;color:var(--hudDim);line-height:1.6;overflow-wrap:anywhere}
+.m1Arm .m1Tag{position:absolute;top:8px;right:8px}
+
+@media (max-width:760px){
+  .row3{grid-template-columns:minmax(0,1fr)}
+  .screen.m1{padding:12px 11px 22px}
+  .m1Hero{padding:10px 0 12px}
+  .m1H2{font-size:19px;letter-spacing:3px}
+  .m1Btn{min-height:56px}
+  .m1Menu,.m1BagGrid{grid-template-columns:minmax(0,1fr)}
+  .m1ArmGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .m1Row>.m1Btn,.m1Row>.m1Back{flex:1 1 100%}
+  .m1Tags{margin-left:0}
+  .m1Thumb{width:42px;height:22px}
+}
