@@ -1,5 +1,5 @@
 // M1 验收：用 playwright-core 驱动本机 Chrome，检查 M1 的存储、配装、输入屏蔽与界面表现
-// 运行：node tools/verify-m1.mjs
+// 运行：node tools/verify-game.mjs
 //   M1_ONLY=functional,storage,rules,ui,mobile   只跑指定分段
 //   M1_MOBILE=1                                  额外跑手机竖屏/横屏分段（自 2026-10-02 起手机端不作为验收项，默认跳过）
 // 前置：8000 端口已有 `python3 -m http.server 8000 --bind 127.0.0.1 --directory dist`，且 dist 为最新构建
@@ -165,14 +165,15 @@ async function uiFlow(browser, errs) {
   const tap = async (sel) => { await page.locator(sel).first().click({ timeout: 8000 }); await page.waitForTimeout(250); };
   let s;
 
-  // 爆破入口必须是明确的开发中提示，且点了不进入任何模式
-  // 注意：该按钮带 aria-disabled="true"，Playwright 会按不可点击处理，这里用 force 绕过可操作性检查
+  // 默认爆破入口进入已交付的原创沙城。
   const bomb = page.locator('#home [data-act="bomb"]');
   const bombOff = await bomb.getAttribute('class');
   const bombAria = await bomb.getAttribute('aria-disabled');
-  await bomb.click({ force: true, timeout: 5000 });
+  await bomb.click({ timeout: 5000 });
   await page.waitForTimeout(250);
-  check('主页：爆破入口标为开发中且点击不进入', /off/.test(bombOff || '') && bombAria === 'true' && (await snapshot(page)).screen === 'home', JSON.stringify({ cls: bombOff, aria: bombAria }));
+  const bombSetup = await page.evaluate(() => ({ mode: window.__game.selectedMode, title: document.getElementById('setupTitle').textContent, menu: !document.getElementById('menu').classList.contains('hidden') }));
+  check('主页：爆破入口进入沙城设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '沙城', JSON.stringify(bombSetup));
+  await page.locator('#btnMenuBack').click();
 
   await tap('#home [data-act="team"]');
   check('主页 → 团队模式设置', await page.locator('#menu').isVisible(), JSON.stringify({ visible: await page.locator('#menu').isVisible() }));
@@ -236,7 +237,7 @@ async function uiFlow(browser, errs) {
   const armCount = await page.locator('#armory .m1Arm').count();
   const armIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.w));
   check('武器库主武器只列 4 件已实现装备', armCount === 4 && armIds.every((id) => ['ak47', 'm4a1', 'awm', 'mp5'].includes(id)), JSON.stringify(armIds));
-  const plannedShown = await page.evaluate(() => ['usp', 'glock18', 'flash', 'smoke'].filter((id) => document.querySelector(`#armory [data-w="${id}"]`)).length);
+  const plannedShown = await page.evaluate(() => ['flash', 'smoke'].filter((id) => document.querySelector(`#armory [data-w="${id}"]`)).length);
   check('武器库不出现未交付装备', plannedShown === 0, String(plannedShown));
 
   await tap('#armory .m1Arm[data-w="mp5"]');
@@ -335,7 +336,7 @@ async function storage(browser, errs) {
   await ready(p2, BASE + '?nolock');
   s = await snapshot(p2);
   check('端到端：损坏档案回退为 3 个唯一背包', s.bags.length === 3 && new Set(s.bags.map((b) => b.split(':')[0])).size === 3, s.bags.join(','));
-  check('端到端：未交付 ID usp/flash 被回退', !s.bags.some((b) => /usp|flash/.test(b)), s.bags.join(','));
+  check('端到端：主武器槽的错误类别 USP 与未交付 flash 被回退', !s.bags.some((b) => /usp|flash/.test(b)), s.bags.join(','));
   check('端到端：类别不符的副武器槽未被主武器顶替', (await p2.evaluate(() => window.__game.profile.data.backpacks[0].secondary)) === 'deagle');
   check('端到端：无效选中项回退到合法背包', ['bag-1', 'bag-2', 'bag-3'].includes(s.selected), String(s.selected));
   check('端到端：坏档案下仍能开局', await p2.evaluate(() => { window.__game.startTeamMatch(); return true; }));
@@ -407,6 +408,301 @@ async function rules(browser, errs) {
   await page.close();
 }
 
+// ---------- M1B：USP / Glock-18 与枪械动作 ----------
+async function weapons(browser, errs) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watchErrors(page, errs);
+  await ready(page, BASE + '?nolock');
+
+  // 武器库：副武器应为 3 件，且新枪可装备
+  await page.evaluate(() => { window.__game.screens.openArmory({ bagId: 'bag-1', slot: 'secondary' }); });
+  await page.waitForTimeout(300);
+  const secIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.w));
+  check('武器库：副武器列出 deagle / usp / glock18', secIds.length === 3 && ['deagle', 'usp', 'glock18'].every((id) => secIds.includes(id)), JSON.stringify(secIds));
+  await page.locator('#armory .m1Arm[data-w="usp"]').first().click();
+  await page.waitForTimeout(300);
+  let s = await snapshot(page);
+  check('新枪可装备并保存到背包', s.bags.includes('bag-1:deagle') === false && (await page.evaluate(() => window.__game.profile.data.backpacks[0].secondary)) === 'usp');
+  await page.evaluate(() => { window.__game.profile.equip('bag-1', 'secondary', 'glock18'); });
+
+  // 开局带 glock18
+  await page.evaluate(() => window.__game.startTeamMatch());
+  await page.waitForFunction(() => window.__game.playing && window.__game.player, null, { timeout: 20000 });
+  s = await snapshot(page);
+  check('开局副武器使用所选 Glock-18', s.inv[1] === 'glock18', s.inv.join(','));
+  const glock = await page.evaluate(() => { const w = window.__game.player.inv[1]; return { mag: w.mag, reserve: w.reserve, type: w.def.type, auto: w.def.auto }; });
+  check('Glock-18 数据：17 发弹匣、半自动', glock.mag === 17 && glock.auto === false && glock.type === 'pistol', JSON.stringify(glock));
+
+  // 切到副武器并开火：新枪是半自动，按住不放不连发，必须等拔枪动画结束后逐次点击
+  await page.keyboard.press('Digit2');
+  await page.waitForTimeout(800);                    // draw 0.48s，留出余量
+  const before = await page.evaluate(() => window.__game.player.inv[1].mag);
+  await page.mouse.move(720, 420);
+  for (let i = 0; i < 3; i++) { await page.mouse.down(); await page.waitForTimeout(60); await page.mouse.up(); await page.waitForTimeout(200); }
+  const after = await page.evaluate(() => window.__game.player.inv[1].mag);
+  check('新枪可开火并消耗弹药（半自动点射）', after < before, `${before} -> ${after}`);
+  const parts = await page.evaluate(() => {
+    const vm = window.__game.vm;
+    return { hasSlide: !!vm.parts.slide, hasMag: !!vm.parts.mag, hasMuzzle: !!vm.parts.muzzle, hasEject: !!vm.parts.eject, id: vm.id };
+  });
+  check('第一人称模型具备 slide / mag / muzzle / eject 部件', parts.id === 'glock18' && parts.hasSlide && parts.hasMag && parts.hasMuzzle && parts.hasEject, JSON.stringify(parts));
+
+  // 空仓换弹：弹匣归位、弹药补满、备弹减少
+  await page.evaluate(() => { window.__game.player.inv[1].mag = 0; });
+  await page.keyboard.press('KeyR');
+  await page.waitForTimeout(2600);
+  const reloaded = await page.evaluate(() => {
+    const vm = window.__game.vm, p = window.__game.player, w = p.inv[1];
+    const rest = vm.partRest.mag, cur = vm.parts.mag;
+    return {
+      mag: w.mag, reserve: w.reserve,
+      magBack: rest ? (Math.abs(cur.position.y - rest.p.y) < 1e-4 && Math.abs(cur.position.z - rest.p.z) < 1e-4) : null,
+      slideBack: vm.parts.slide && vm.partRest.slide ? Math.abs(vm.parts.slide.position.z - vm.partRest.slide.p.z) < 1e-4 : null,
+      anim: vm.anim ? vm.anim.type : null,
+    };
+  });
+  check('空仓换弹补满弹药且弹匣归位', reloaded.mag === 17 && reloaded.reserve < 51 && reloaded.magBack === true, JSON.stringify(reloaded));
+  check('换弹结束后套筒与动画已复位', reloaded.slideBack !== false && reloaded.anim === null, JSON.stringify(reloaded));
+
+  // 检视与切枪中断：不残留位移
+  await page.keyboard.press('KeyF');
+  await page.waitForTimeout(300);
+  const inspecting = await page.evaluate(() => !!(window.__game.vm.anim && window.__game.vm.anim.type === 'inspect'));
+  await page.keyboard.press('Digit1');
+  await page.waitForTimeout(400);
+  const afterCancel = await page.evaluate(() => {
+    const vm = window.__game.vm;
+    const r = vm.partRest, p = vm.parts;
+    const drift = ['mag', 'slide', 'bolt'].filter((k) => r[k] && p[k] && (Math.abs(p[k].position.z - r[k].p.z) > 1e-4 || Math.abs(p[k].position.y - r[k].p.y) > 1e-4));
+    return { id: vm.id, anim: vm.anim ? vm.anim.type : null, drift };
+  });
+  check('检视动作可触发', inspecting);
+  check('切枪中断检视后无零件位移残留', afterCancel.drift.length === 0 && afterCancel.anim === null, JSON.stringify(afterCancel));
+
+  // 音效表：新枪音色不抛错（不能静默回退成步枪音）
+  const audioOk = await page.evaluate(() => {
+    let err = null;
+    try { window.__game.audio.playShot('usp', null); window.__game.audio.playShot('glock18', null); window.__game.audio.playWeaponSwitch('usp'); window.__game.audio.playWeaponSwitch('glock18'); } catch (e) { err = String(e && e.message || e); }
+    return err;
+  });
+  check('新枪音色调用无异常', audioOk === null, String(audioOk));
+
+  // 第三人称：机器人持新手枪时用手枪持握（枪相对胸骨的位置与步枪不同）
+  await page.evaluate(() => {
+    const g = window.__game;
+    const bot = g.actors.find((a) => !a.isPlayer);
+    if (bot) bot.soldier.setWeapon('usp');
+  });
+  await page.waitForTimeout(400);
+  const holdPistol = await page.evaluate(() => {
+    const bot = window.__game.actors.find((a) => !a.isPlayer);
+    const p = bot.soldier.gun.position;
+    return { id: bot.soldier.gunId, x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), hasGrip: !!bot.soldier.gun.userData.anchors.grip };
+  });
+  await page.evaluate(() => {
+    const bot = window.__game.actors.find((a) => !a.isPlayer);
+    if (bot) bot.soldier.setWeapon('ak47');
+  });
+  await page.waitForTimeout(400);
+  const holdRifle = await page.evaluate(() => {
+    const bot = window.__game.actors.find((a) => !a.isPlayer);
+    const p = bot.soldier.gun.position;
+    return { id: bot.soldier.gunId, x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3) };
+  });
+  check('第三人称可持新手枪并带锚点', holdPistol.id === 'usp' && holdPistol.hasGrip, JSON.stringify(holdPistol));
+  check('第三人称新手枪用手枪持握（区别于步枪）', Math.abs(holdPistol.x - 0.03) < 0.02 && Math.abs(holdPistol.z + 0.42) < 0.03 && Math.abs(holdRifle.x - 0.1) < 0.02 && Math.abs(holdRifle.z + 0.3) < 0.03, JSON.stringify({ pistol: holdPistol, rifle: holdRifle }));
+
+  // 现有武器数值未被改动
+  const vals = await page.evaluate(() => {
+    const W = window.__game.player.inv[0].def;
+    return { ak: W.dmg, rpm: W.rpm };
+  });
+  check('现有武器数值未变（AK-47 dmg 36 / 600rpm）', vals.ak === 36 && vals.rpm === 600, JSON.stringify(vals));
+
+  // USP 单独走一遍开火、空仓换弹、复活（此前实战测试主要覆盖 Glock-18）
+  await page.evaluate(() => { window.__game.quitToMenu(); window.__game.profile.equip('bag-1', 'secondary', 'usp'); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__game.startTeamMatch());
+  await page.waitForFunction(() => window.__game.playing && window.__game.player, null, { timeout: 20000 });
+  let usp = await snapshot(page);
+  check('USP：开局副武器生效', usp.inv[1] === 'usp', usp.inv.join(','));
+  await page.keyboard.press('Digit2');
+  await page.waitForTimeout(800);
+  const uspBefore = await page.evaluate(() => window.__game.player.inv[1].mag);
+  await page.mouse.move(720, 420);
+  for (let i = 0; i < 3; i++) { await page.mouse.down(); await page.waitForTimeout(60); await page.mouse.up(); await page.waitForTimeout(200); }
+  const uspAfter = await page.evaluate(() => window.__game.player.inv[1].mag);
+  check('USP：半自动点射消耗弹药（12 发弹匣）', uspBefore === 12 && uspAfter < 12, `${uspBefore} -> ${uspAfter}`);
+  await page.evaluate(() => { window.__game.player.inv[1].mag = 0; });
+  await page.keyboard.press('KeyR');
+  await page.waitForTimeout(2600);
+  const uspReload = await page.evaluate(() => {
+    const p = window.__game.player, w = p.inv[1];
+    const vm = window.__game.vm;
+    return { mag: w.mag, reserve: w.reserve, magBack: vm.partRest.mag ? Math.abs(vm.parts.mag.position.y - vm.partRest.mag.p.y) < 1e-4 : null };
+  });
+  check('USP：空仓换弹补满且弹匣归位', uspReload.mag === 12 && uspReload.reserve < 48 && uspReload.magBack === true, JSON.stringify(uspReload));
+  await page.evaluate(() => {
+    const g = window.__game, p = g.player;
+    p.inv[1].mag = 3;
+    const foe = g.actors.find((a) => a.team !== p.team && a.alive);
+    g.kill(p, foe, 'ak47', false, false, new p.pos.constructor(0, 0, 1));
+  });
+  await page.waitForFunction(() => window.__game.player && window.__game.player.alive === true, null, { timeout: 20000 });
+  await page.waitForTimeout(300);
+  const uspRespawn = await page.evaluate(() => { const p = window.__game.player; return { id: p.inv[1].id, mag: p.inv[1].mag, bag: p.activeBagId }; });
+  check('USP：复活后仍持 USP 且弹药重置为满', uspRespawn.id === 'usp' && uspRespawn.mag === 12, JSON.stringify(uspRespawn));
+  await page.close();
+}
+
+// ---------- 修复回归：结算与面板、投掷中死亡、跳跃物理、枪口对齐、存储失败提示、重新开局资源 ----------
+async function regressions(browser, errs) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watchErrors(page, errs);
+  await ready(page, BASE + '?nolock');
+
+  // 1) 开着背包结束比赛：结算页必须可见、面板收起、返回主页可用
+  await page.evaluate(() => window.__game.startTeamMatch());
+  await page.waitForFunction(() => window.__game.playing && window.__game.player, null, { timeout: 20000 });
+  await page.evaluate(() => window.__game.toggleLoadout());
+  await page.waitForTimeout(250);
+  check('结算前：背包面板已打开', await page.evaluate(() => window.__game.inLoadout === true && !document.getElementById('backpack').classList.contains('hidden')));
+  await page.evaluate(() => window.__game.endMatch());
+  await page.waitForTimeout(300);
+  const settle = await page.evaluate(() => ({
+    end: !document.getElementById('end').classList.contains('hidden'),
+    bag: !document.getElementById('backpack').classList.contains('hidden'),
+    inLoadout: !!window.__game.inLoadout,
+    screen: window.__game.screens.visible,
+    btnMenuVisible: (() => { const b = document.getElementById('btnMenu'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; })(),
+  }));
+  check('开着背包结束比赛：面板收起且结算页与按钮可见', settle.end && !settle.bag && !settle.inLoadout && settle.screen === null && settle.btnMenuVisible, JSON.stringify(settle));
+  await page.locator('#btnMenu').click();
+  await page.waitForTimeout(300);
+  check('结算页「主菜单」可点并回到主页', (await snapshot(page)).screen === 'home');
+  await shoot(page, 'regress-settle-with-bag');
+
+  // 2) 投掷中死亡：复活后不得自动把新手雷投出去
+  await page.evaluate(() => window.__game.startTeamMatch());
+  await page.waitForFunction(() => window.__game.playing && window.__game.player, null, { timeout: 20000 });
+  const throwBefore = await page.evaluate(() => {
+    const g = window.__game, p = g.player;
+    p.inv[3].mag = 1;
+    p.pendingThrow = 0.4;           // 投掷蓄力中（尚未出手）
+    return { nades: g.nades.length, mag: p.inv[3].mag };
+  });
+  await page.evaluate(() => {
+    const g = window.__game, p = g.player;
+    const foe = g.actors.find((a) => a.team !== p.team && a.alive);
+    p.pendingThrow = 0.4;
+    g.kill(p, foe, 'ak47', false, false, new p.pos.constructor(0, 0, 1));
+  });
+  await page.waitForFunction(() => window.__game.player && window.__game.player.alive === true, null, { timeout: 20000 });
+  await page.waitForTimeout(400);
+  const throwAfter = await page.evaluate(() => {
+    const g = window.__game, p = g.player;
+    return { pendingThrow: p.pendingThrow, autoSwitchAt: p.autoSwitchAt, nades: g.nades.length, mag: p.inv[3].mag };
+  });
+  check('投掷中死亡：复活后不自动投出手雷', throwAfter.pendingThrow === 0 && throwAfter.nades === throwBefore.nades, JSON.stringify({ before: throwBefore, after: throwAfter }));
+  check('投掷中死亡：复活后投掷物重新发放', throwAfter.mag === 1, String(throwAfter.mag));
+
+  // 3) 跳跃中开背包：物理继续，不能悬停在空中
+  await page.evaluate(() => { const p = window.__game.player; p.pos.set(0, 0.02, 0); p.vel.set(0, 0, 0); p.onGround = true; });
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(120);
+  await page.keyboard.up('Space');
+  await page.evaluate(() => window.__game.toggleLoadout());
+  const yMid = await page.evaluate(() => window.__game.player.pos.y);
+  await page.waitForTimeout(1200);
+  const yAfter = await page.evaluate(() => ({ y: +window.__game.player.pos.y.toFixed(3), onGround: window.__game.player.onGround, inLoadout: window.__game.inLoadout }));
+  check('跳跃中开背包：物理继续并落地，不会悬停', yMid > 0.3 && yAfter.y < yMid && yAfter.onGround === true, JSON.stringify({ yMid: +yMid.toFixed(3), ...yAfter }));
+  await page.evaluate(() => window.__game.closeBagPanel());
+  await page.waitForTimeout(200);
+
+  // 4) 枪口锚点必须与模型最前端对齐（否则枪焰飘在枪口前方）
+  const muzzle = await page.evaluate(() => {
+    const g = window.__game;
+    const out = {};
+    const underFlash = (o) => { let n = o; while (n) { if (n === g.vm.flash) return true; n = n.parent; } return false; };
+    for (const id of Object.keys(g.hud.icons)) {
+      g.vm.equip(id, 0.001);
+      const gun = g.vm.cur;
+      gun.updateMatrixWorld(true);
+      const inv = gun.matrixWorld.clone().invert();
+      const scratch = gun.position.clone();
+      let front = 1e9;
+      gun.traverse((o) => {
+        if (!o.isMesh || underFlash(o)) return;
+        o.geometry.computeBoundingBox();
+        const bb = o.geometry.boundingBox;
+        for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) {
+          scratch.set(x, y, z).applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+          if (scratch.z < front) front = scratch.z;
+        }
+      });
+      const mz = g.vm.parts.muzzle ? g.vm.parts.muzzle.position.z : null;
+      out[id] = mz === null ? null : +(mz - front).toFixed(4);
+    }
+    return out;
+  });
+  const badMuzzle = Object.entries(muzzle).filter(([, gap]) => gap === null || gap > 0.015 || gap < -0.02);
+  check('所有武器枪口锚点与模型最前端对齐（≤1.5cm）', badMuzzle.length === 0, JSON.stringify(muzzle));
+  check('Glock-18 枪口不再前伸', muzzle.glock18 !== null && Math.abs(muzzle.glock18) <= 0.015, String(muzzle.glock18));
+
+  // 5) 存储写盘失败：必须提示无法保存，不能报绿色成功
+  await page.evaluate(() => window.__game.quitToMenu());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__game.profile.save = () => false;                 // 模拟 setItem 失败
+    document.querySelectorAll('.m1Notice').forEach((n) => { n.textContent = ''; n.className = 'm1Notice'; });
+    window.__game.screens.openArmory({ bagId: 'bag-1', slot: 'primary' });
+  });
+  await page.waitForTimeout(300);
+  await page.locator('#armory .m1Arm[data-w="mp5"]').first().click();
+  await page.waitForTimeout(400);
+  const notice = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#backpack .m1Notice')].find((n) => n.textContent.trim());
+    return el ? { text: el.textContent.trim(), cls: el.className } : null;
+  });
+  check('保存失败时提示「无法保存」而不是绿色成功', !!notice && /无法保存/.test(notice.text) && /warn/.test(notice.cls), JSON.stringify(notice));
+
+  // 6) 反复重新开局：资源不持续增长
+  const growth = await page.evaluate(async () => {
+    const g = window.__game, r = g.renderer.renderer;
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    const snap = () => ({ geo: r.info.memory.geometries, tex: r.info.memory.textures });
+    g.startTeamMatch(); await sleep(700);
+    const inMatch = snap();
+    g.quitToMenu(); await sleep(350);
+    const first = snap();
+    for (let i = 0; i < 3; i++) {
+      g.startTeamMatch(); await sleep(700);
+      g.quitToMenu(); await sleep(350);
+    }
+    return { inMatch, first, last: snap() };
+  });
+  check('连续重新开局 3 轮后资源不增长', growth.last.tex <= growth.first.tex + 1 && growth.last.geo <= growth.first.geo + 3, JSON.stringify(growth));
+  // 数量稳定不能发现共享几何被销毁后重传；直接监听真实实例共用的 geometry。
+  const ownership = await page.evaluate(() => {
+    const g = window.__game;
+    g.startTeamMatch();
+    const [a, b] = g.actors.filter((x) => !x.isPlayer);
+    a.soldier.setWeapon('ak47'); b.soldier.setWeapon('ak47');
+    const geo = a.soldier.gun.geometry;
+    const shared = geo === b.soldier.gun.geometry;
+    let disposed = 0;
+    const count = () => disposed++;
+    geo.addEventListener('dispose', count);
+    a.soldier.setWeapon('usp');
+    const afterSwitch = disposed;
+    g.quitToMenu();
+    geo.removeEventListener('dispose', count);
+    return { shared, afterSwitch, afterQuit: disposed };
+  });
+  check('同款枪共享几何：换枪及退出不销毁仍由缓存持有的资源', ownership.shared && ownership.afterSwitch === 0 && ownership.afterQuit === 0, JSON.stringify(ownership));
+  await page.close();
+}
+
 async function main() {
   if (!fs.existsSync(CHROME)) { console.error('找不到 Chrome：' + CHROME); process.exit(2); }
   const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'] });
@@ -418,6 +714,8 @@ async function main() {
     if (want('functional')) await functional(browser, errs);
     if (want('storage')) await storage(browser, errs);
     if (want('rules')) await rules(browser, errs);
+    if (want('weapons')) await weapons(browser, errs);
+    if (want('regressions')) await regressions(browser, errs);
     if (want('ui')) await uiFlow(browser, errs);
     if (want('mobile')) await mobile(browser, errs);
   } catch (e) {

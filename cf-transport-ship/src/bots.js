@@ -36,10 +36,29 @@ export class Bot extends Actor {
     this.heard = null; this.heardT = -99;
     this.fireHeld = false;
     this.wantJump = false;
+    this.ammoFallback = false; this.ammoSwitchUntil = 0;
+    this.navFailureSince = -1; this.blockedReportT = -99;
+    this.yieldUntil = 0; this.yieldWish = null;
     this.side = this.team === 'BL' ? 1 : -1; // 潜伏者坐标系转换
   }
   onSpawn() {
     this.path = null; this.goal = null; this.target = null; this.visible = false; this.lastSeen = null;
+    this.lastSeenT = -99; this.heard = null; this.heardT = -99;
+    this.nadePlan = null; this.wantScope = false; this.wantJump = false; this.fireHeld = false;
+    this.lookYaw = undefined; this.lookPitch = undefined;
+    this.burst = 0; this.burstPauseUntil = 0; this.crouchUntil = 0;
+    this.stuckT = 0; this.stuckN = 0; this.lastCheck.copy(this.pos);
+    this.objectiveTask = null; this.objectiveKey = null; this.objectivePathT = -99;
+    this.holdYaw = undefined;
+    this.ammoFallback = false; this.ammoSwitchUntil = 0;
+    this.navFailureSince = -1; this.blockedReportT = -99;
+    this.yieldUntil = 0; this.yieldWish = null;
+    if (this.game.mode === 'bomb') {
+      this.role = 'bomb';
+      this.stage = 0;
+      this.pickGoal();
+      return;
+    }
     const r = Math.random();
     this.role = this.primary === 'awm' ? 'hold' : r < 0.25 ? 'flank' : 'rush';
     this.lane = LANES[(Math.random() * 3) | 0];
@@ -49,6 +68,10 @@ export class Bot extends Actor {
   L(x, z) { return [x * this.side, z * this.side]; } // 己方坐标 -> 世界
   pickGoal() {
     const g = this.game, nav = g.nav, rnd = Math.random;
+    if (g.mode === 'bomb') {
+      this.pickBombGoal(true);
+      return;
+    }
     let gx, gz;
     if (this.role === 'hold') {
       const h = HOLDS[(rnd() * HOLDS.length) | 0];
@@ -66,6 +89,143 @@ export class Bot extends Actor {
     this.goal = [gx, gz];
     this.path = nav.findPath(this.pos.x, this.pos.z, gx, gz);
     this.pi = 1;
+  }
+  pickBombGoal(force = false) {
+    const g = this.game;
+    const task = g.getBombTask?.(this) || null;
+    this.objectiveTask = task;
+    if (!task?.goal) {
+      this.goal = null;
+      this.path = null;
+      this.objectiveKey = null;
+      return;
+    }
+    const { x, z } = task.goal;
+    const key = `${task.interact || 'guard'}:${task.siteId || ''}`;
+    const changed = !this.goal || Math.hypot(this.goal[0] - x, this.goal[1] - z) > 1;
+    const needsPath = (!this.path || this.pi >= this.path.length) && Math.hypot(this.pos.x - x, this.pos.z - z) > 0.65;
+    // 移动护送目标更新时重算路径；站在守点位置时不会不断请求同一路径。
+    if (force || key !== this.objectiveKey || changed || needsPath || (g.time - this.objectivePathT > 3 && this.stuckN > 0)) {
+      this.goal = [x, z];
+      this.path = g.nav.findPath(this.pos.x, this.pos.z, x, z);
+      this.pi = 1;
+      this.objectivePathT = g.time;
+    }
+    this.objectiveKey = key;
+    if (!this.path && Math.hypot(this.pos.x - x, this.pos.z - z) > 0.75) {
+      if (this.navFailureSince < 0) this.navFailureSince = g.time;
+      if (g.time - this.navFailureSince > 1) this.reportBlockedTask();
+    } else this.navFailureSince = -1;
+  }
+  reportBlockedTask() {
+    if (this.game.time - this.blockedReportT < 2) return;
+    this.blockedReportT = this.game.time;
+    this.game.reportBombTaskBlocked?.(this, this.objectiveTask);
+  }
+  bombLookYaw(now, pathYaw = null) {
+    const point = this.objectiveTask?.lookAt;
+    if (!point) return null;
+    const dx = point.x - this.pos.x, dz = point.z - this.pos.z;
+    if (Math.hypot(dx, dz) < 0.1) return null;
+    const yaw = Math.atan2(-dx, -dz);
+    // 行进时看前方入口，到守点后在入口附近有限巡视。
+    if (pathYaw !== null) return pathYaw + THREE.MathUtils.clamp(wrapPi(yaw - pathYaw), -0.65, 0.65);
+    return yaw + (this.objectiveTask.interact ? 0 : Math.sin(now * 0.45 + this.id * 0.9) * 0.28);
+  }
+  ammoDecision(now) {
+    const current = this.weapon, primary = this.inv[0], secondary = this.inv[1];
+    if (!current || this.pendingThrow || this.nadePlan || this.c4Selected || this.game.isInteracting?.(this)) return null;
+    if (!['rifle', 'smg', 'sniper', 'pistol'].includes(current.def.type)) return null;
+    const ready = now >= this.readyAt && now >= this.ammoSwitchUntil;
+    const closeThreat = this.visible && this.target?.alive && this.pos.distanceTo(this.target.pos) < 12;
+    if (this.slot === 0 && primary.mag === 0) {
+      const reloadLeft = primary.reloading ? primary.reloadUntil - now : primary.def.reload;
+      const canBackup = secondary?.mag > 0 && !secondary.reloading;
+      if (ready && canBackup && (primary.reserve <= 0 || (closeThreat && reloadLeft > secondary.def.draw + 0.25))) {
+        this.ammoFallback = true;
+        this.ammoSwitchUntil = now + 1.2;
+        return { sw: 1, reload: false };
+      }
+      return { sw: null, reload: primary.canReload() };
+    }
+    if (this.slot === 1 && this.ammoFallback) {
+      const canRestore = primary && (primary.mag > 0 || primary.canReload());
+      const disengaged = !this.visible && now - this.lastSeenT > 1.2;
+      if (ready && canRestore && (disengaged || (secondary.mag === 0 && primary.mag > 0))) {
+        this.ammoFallback = false;
+        this.ammoSwitchUntil = now + 1.2;
+        return { sw: 0, reload: false };
+      }
+    }
+    if (current.mag === 0) return { sw: null, reload: current.canReload() };
+    return null;
+  }
+  clearObjectiveActions(dt) {
+    this.fireHeld = false; this.nadePlan = null; this.wantJump = false; this.wantScope = false;
+    this.scoped = 0; this.pendingThrow = this.autoSwitchAt = this.reScope = 0;
+    // 已开始的换弹及武器恢复照常推进，交互不发出任何开火/切枪命令。
+    this.weaponUpdate(dt, { fire: false, firePressed: false, alt: false, altPressed: false, reload: false, sw: null });
+  }
+  localClear(x, z) {
+    const g = this.game;
+    return !g.world.blocked(x, this.pos.y + 0.05, z, this.radius, this.height - 0.1)
+      && (!g.nav?.lineFree || g.nav.lineFree(this.pos.x, this.pos.z, x, z));
+  }
+  avoidTeammates(wishX, wishZ) {
+    const g = this.game, now = g.time;
+    let nearest = null, nearD = Infinity;
+    for (const a of g.actors) {
+      if (a === this || !a.alive || a.team !== this.team || Math.abs(a.pos.y - this.pos.y) > 1) continue;
+      const d = Math.hypot(a.pos.x - this.pos.x, a.pos.z - this.pos.z);
+      if (d < 1.6 && d < nearD) { nearest = a; nearD = d; }
+      if (g.isInteracting(a) && d < 1.55) {
+        // 先在实体接触前离开安拆区，避免 Actor.move 推人后清零队友进度。
+        const dx = this.pos.x - a.pos.x, dz = this.pos.z - a.pos.z;
+        const length = Math.hypot(dx, dz) || 1;
+        const away = [dx / length, dz / length];
+        for (const [x, z] of [away, [-away[1], away[0]], [away[1], -away[0]]]) {
+          if (this.localClear(this.pos.x + x * 0.65, this.pos.z + z * 0.65)) return [x, z];
+        }
+        return [0, 0];
+      }
+    }
+    if (now < this.yieldUntil && this.yieldWish) return this.yieldWish;
+    const length = Math.hypot(wishX, wishZ);
+    if (!nearest || length < 0.1) return [wishX, wishZ];
+    const dx = nearest.pos.x - this.pos.x, dz = nearest.pos.z - this.pos.z;
+    const forwardX = wishX / length, forwardZ = wishZ / length;
+    const ahead = dx * forwardX + dz * forwardZ;
+    const across = dx * -forwardZ + dz * forwardX;
+    const priority = nearest.isPlayer || g.isInteracting(nearest) || nearest.id === g.bomb?.carrierId
+      || (this.id !== g.bomb?.carrierId && nearest.id < this.id);
+    if (!priority || ahead < 0 || Math.abs(across) > 0.85) return [wishX, wishZ];
+    const side = across >= 0 ? -1 : 1;
+    for (const sign of [side, -side]) {
+      const x = -forwardZ * sign, z = forwardX * sign;
+      if (!this.localClear(this.pos.x + x * 0.8, this.pos.z + z * 0.8)) continue;
+      this.yieldWish = [x * 0.65 - forwardX * 0.15, z * 0.65 - forwardZ * 0.15];
+      this.yieldUntil = now + 0.35;
+      return this.yieldWish;
+    }
+    // 窄口无侧向空间时短暂停步，让固定优先级的一方先过。
+    this.yieldWish = [0, 0]; this.yieldUntil = now + 0.25;
+    return this.yieldWish;
+  }
+  detour() {
+    if (!this.path || !this.goal || this.pi >= this.path.length) return false;
+    const wp = this.path[this.pi], dx = wp[0] - this.pos.x, dz = wp[1] - this.pos.z;
+    const length = Math.hypot(dx, dz);
+    if (length < 0.1) return false;
+    for (const sign of [this.id % 2 ? 1 : -1, this.id % 2 ? -1 : 1]) {
+      const x = this.pos.x - dz / length * sign * 0.85 + dx / length * 0.3;
+      const z = this.pos.z + dx / length * sign * 0.85 + dz / length * 0.3;
+      if (!this.localClear(x, z)) continue;
+      const rest = this.game.nav.findPath(x, z, this.goal[0], this.goal[1]);
+      if (!rest) continue;
+      this.path = [[this.pos.x, this.pos.z], [x, z], ...rest.slice(1)]; this.pi = 1;
+      return true;
+    }
+    return false;
   }
   hear(pos, loud) {
     if (!this.alive || this.visible) return;
@@ -120,14 +280,20 @@ export class Bot extends Actor {
         this.burst = 0;
       }
       this.target = best; this.visible = true; this.lastSeen = best.pos.clone(); this.lastSeenT = now;
-      this.path = null;
+      if (g.mode !== 'bomb') this.path = null;
     } else {
       this.visible = false;
       if (this.target && (!this.target.alive || now - this.lastSeenT > 5)) this.target = null;
     }
+    // 任务导航与当前感知在同一个思考周期更新。
+    if (g.mode === 'bomb') this.pickBombGoal();
+    const objectiveBusy = g.mode === 'bomb' && (g.isInteracting(this) || this.c4Selected);
     // 移动决策
     if (!this.visible) {
-      if (this.lastSeen && now - this.lastSeenT < 5 && this.role !== 'hold') {
+      if (g.mode === 'bomb') {
+        // 目标只来自模式层的公开任务，不从敌人实时坐标生成导航。
+        // lookAt 由地图任务提供，在 update 中按路径和守点状态转向。
+      } else if (this.lastSeen && now - this.lastSeenT < 5 && this.role !== 'hold') {
         if (!this.path || this.huntFor !== this.lastSeenT) {
           this.path = g.nav.findPath(this.pos.x, this.pos.z, this.lastSeen.x, this.lastSeen.z); this.pi = 1; this.huntFor = this.lastSeenT;
         }
@@ -143,26 +309,32 @@ export class Bot extends Actor {
       }
       // 换弹
       const w = this.weapon;
-      if (w.def.mag > 1 && w.mag < w.def.mag * 0.5 && w.canReload() && now - this.lastSeenT > 1.2) this.startReload();
+      if (!objectiveBusy && w.def.mag > 1 && w.mag < w.def.mag * 0.5 && w.canReload() && now - this.lastSeenT > 1.2) this.startReload();
       // 手雷
       this.nadeT -= 0.15;
-      if (this.nadeT <= 0 && this.lastSeen && now - this.lastSeenT < 3 && this.inv[3].mag > 0) {
+      if (!objectiveBusy && this.nadeT <= 0 && this.lastSeen && now - this.lastSeenT < 3 && this.inv[3].mag > 0) {
         const d = this.lastSeen.distanceTo(this.pos);
         if (d > 7 && d < 24 && Math.random() < 0.35) { this.nadePlan = this.lastSeen.clone(); this.nadeT = 25 + Math.random() * 25; }
       }
     } else {
       // 狙击：开镜
       const w = this.weapon;
-      if (w.def.type === 'sniper' && !this.scoped && bestD > 7 && now >= w.boltUntil) this.wantScope = true;
+      if (!objectiveBusy && w.def.type === 'sniper' && !this.scoped && bestD > 7 && now >= w.boltUntil) this.wantScope = true;
       if (Math.random() < 0.12 * this.diff.strafe) this.crouchUntil = now + 0.6 + Math.random() * 1.2;
     }
     // 卡住检测
     this.stuckT += 0.15;
     if (this.stuckT > 1.0) {
       const moved = this.lastCheck.distanceTo(this.pos);
-      if (this.path && this.pi < this.path.length && moved < 0.35 && !this.visible) {
-        this.stuckN++; this.wantJump = true;
-        if (this.stuckN > 2) { this.stuckN = 0; this.stage++; this.pickGoal(); }
+      if (this.path && this.pi < this.path.length && moved < 0.35 && !this.visible && now >= this.yieldUntil) {
+        this.stuckN++;
+        if (g.mode === 'bomb') {
+          if (this.stuckN === 1) this.detour();
+          if (this.stuckN >= 2) { this.reportBlockedTask(); this.stuckN = 0; this.pickGoal(); }
+        } else {
+          this.wantJump = true;
+          if (this.stuckN > 2) { this.stuckN = 0; this.stage++; this.pickGoal(); }
+        }
       } else this.stuckN = 0;
       this.lastCheck.copy(this.pos); this.stuckT = 0;
     }
@@ -170,13 +342,48 @@ export class Bot extends Actor {
   update(dt) {
     const g = this.game, now = g.time;
     if (!this.alive) return;
+    if (g.mode === 'bomb' && !g.canFight()) {
+      this.fireHeld = false; this.nadePlan = null; this.wantJump = false;
+      this.vel.set(0, 0, 0);
+      return;
+    }
     this.thinkT -= dt;
     if (this.thinkT <= 0) { this.thinkT = 0.13 + Math.random() * 0.06; this.think(); }
+    let urgentTravel = false;
+    if (g.mode === 'bomb') {
+      g.updateBotObjective(this);
+      if (g.isInteracting(this)) {
+        // 安拆期间武器状态与任务不能竞争，也不靠角色分离把人推出交互范围。
+        this.clearObjectiveActions(dt);
+        this.vel.x = this.vel.z = 0;
+        this.move(dt, 0, 0, false, false, false);
+        return;
+      }
+      const task = g.getBombTask(this);
+      if (task && ['plant', 'defuse'].includes(task.interact)
+        && Math.hypot(this.pos.x - task.goal.x, this.pos.z - task.goal.z) < 0.7
+        && g.shouldBotInteract(this, task)) {
+        // 已抵达任务点后先站定，再由下一段模拟开始安拆。
+        // 行进中仍会与目击敌人交战；到点后选择完成目标，受击死亡照常取消任务。
+        this.clearObjectiveActions(dt);
+        this.move(dt, 0, 0, false, false, false);
+        return;
+      }
+      urgentTravel = !!(task?.urgent && ['plant', 'defuse'].includes(task.interact)
+        && Math.hypot(this.pos.x - task.goal.x, this.pos.z - task.goal.z) >= 0.7);
+      if (urgentTravel) {
+        // 时间紧迫时携包/拆包负责人先赶路，取消尚未执行的投雷与慢速姿态。
+        this.nadePlan = null; this.wantJump = false; this.wantScope = false;
+        this.scoped = 0; this.scopeReady = false; this.reScope = 0;
+      }
+    }
     const D = this.diff;
-    let wishX = 0, wishZ = 0, fire = false, firePressed = false, alt = false, crouch = now < this.crouchUntil, walk = false;
-    let sw = null;
+    let wishX = 0, wishZ = 0, fire = false, firePressed = false, alt = false, crouch = !urgentTravel && now < this.crouchUntil, walk = false;
+    let sw = null, reload = false;
     // 手雷投掷流程
-    if (this.nadePlan) {
+    if (urgentTravel && this.slot === 3 && !this.pendingThrow) {
+      sw = 0; this.autoSwitchAt = 0;
+    } else if (this.nadePlan) {
       if (this.slot !== 3) sw = 3;
       else if (now >= this.readyAt && !this.pendingThrow) {
         const d = this.nadePlan.distanceTo(this.pos);
@@ -196,7 +403,8 @@ export class Bot extends Actor {
       const trueYaw = Math.atan2(-dx, -dz), truePitch = Math.atan2(dy, hd);
       const k = Math.exp(-D.track * dt);
       this.errY *= k; this.errP *= k;
-      const wob = 0.004 * (1 + tgt.speed / 4);
+      const targetSpeed = Number.isFinite(tgt.speed) ? tgt.speed : 0;
+      const wob = 0.004 * (1 + targetSpeed / 4);
       dYaw = trueYaw + this.errY + Math.sin(now * 3.1 + this.id) * wob;
       dPitch = truePitch + this.errP + Math.cos(now * 2.7 + this.id) * wob * 0.6 - this.punchP * D.comp;
       this.lookYaw = undefined; this.lookPitch = undefined;
@@ -216,14 +424,23 @@ export class Bot extends Actor {
         }
       }
       if (this.wantScope) { alt = true; this.wantScope = false; }
-      // 横移
-      this.strafeT -= dt;
-      if (this.strafeT <= 0) { this.strafeT = 0.25 + Math.random() * 0.7; this.strafeDir = Math.random() < 0.5 ? -1 : 1; if (Math.random() < 0.2) this.strafeDir = 0; }
-      const moveK = d.type === 'sniper' ? 0 : D.strafe;
-      const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
-      wishX = rx * this.strafeDir * moveK; wishZ = rz * this.strafeDir * moveK;
-      if (hd > 22 && d.type !== 'sniper' && this.role !== 'hold') { wishX += -Math.sin(this.yaw) * 0.5; wishZ += -Math.cos(this.yaw) * 0.5; }
-      if (Math.random() < D.bunny * dt && this.onGround && d.type !== 'sniper') this.wantJump = true;
+      if (urgentTravel) {
+        // 仍瞄准目击敌人，移动只跟随既有路径，不为追敌直穿墙体。
+        if (this.path && this.pi < this.path.length) {
+          const wp = this.path[this.pi], dx = wp[0] - this.pos.x, dz = wp[1] - this.pos.z, dd = Math.hypot(dx, dz);
+          if (dd < 0.55) this.pi++;
+          else { wishX = dx / dd; wishZ = dz / dd; }
+        }
+      } else {
+        // 横移
+        this.strafeT -= dt;
+        if (this.strafeT <= 0) { this.strafeT = 0.25 + Math.random() * 0.7; this.strafeDir = Math.random() < 0.5 ? -1 : 1; if (Math.random() < 0.2) this.strafeDir = 0; }
+        const moveK = d.type === 'sniper' ? 0 : D.strafe;
+        const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
+        wishX = rx * this.strafeDir * moveK; wishZ = rz * this.strafeDir * moveK;
+        if (hd > 22 && d.type !== 'sniper' && this.role !== 'hold') { wishX += -Math.sin(this.yaw) * 0.5; wishZ += -Math.cos(this.yaw) * 0.5; }
+        if (Math.random() < D.bunny * dt && this.onGround && d.type !== 'sniper') this.wantJump = true;
+      }
     } else {
       if (this.scoped && !this.visible && now - this.lastSeenT > 2) alt = true; // 收镜
       // 沿路径行走
@@ -234,15 +451,25 @@ export class Bot extends Actor {
         else { wishX = dx / dd; wishZ = dz / dd; }
         if (this.lookYaw === undefined || now - this.heardT > 1.5) dYaw = Math.atan2(-dx, -dz);
         dPitch = 0;
-        walk = this.role === 'flank' && this.stage === 1;
+        walk = !urgentTravel && this.role === 'flank' && this.stage === 1;
       } else if (this.role === 'hold' && this.holdYaw !== undefined) {
         dYaw = this.holdYaw + Math.sin(now * 0.4 + this.id) * 0.35; dPitch = -0.02;
         crouch = crouch || Math.sin(now * 0.3 + this.id) > 0.3;
       }
-      if (this.lookYaw !== undefined) { dYaw = this.lookYaw; if (this.lookPitch !== undefined) dPitch = this.lookPitch; }
+      if (g.mode === 'bomb') {
+        const moving = Math.hypot(wishX, wishZ) > 0.1;
+        const taskYaw = this.bombLookYaw(now, moving ? Math.atan2(-wishX, -wishZ) : null);
+        if (taskYaw !== null) dYaw = taskYaw;
+      }
+      if (this.lookYaw !== undefined && (g.mode !== 'bomb' || now - this.lastHurt < 0.65)) {
+        dYaw = this.lookYaw; if (this.lookPitch !== undefined) dPitch = this.lookPitch;
+      }
     }
-    // 队友分离
-    for (const a of g.actors) {
+    // 取消投雷计划后换回主枪，本帧不能顺带向已拿出的手雷发出拉环命令。
+    if (urgentTravel && this.slot === 3) { fire = false; firePressed = false; alt = false; }
+    // 爆破用确定优先级局部让行；实体重叠仍由 Actor.move 处理。
+    if (g.mode === 'bomb') [wishX, wishZ] = this.avoidTeammates(wishX, wishZ);
+    else for (const a of g.actors) {
       if (a === this || !a.alive) continue;
       const dx = this.pos.x - a.pos.x, dz = this.pos.z - a.pos.z, d2 = dx * dx + dz * dz;
       if (d2 < 1.2 && d2 > 1e-4) { const d = Math.sqrt(d2); wishX += dx / d * 0.6; wishZ += dz / d * 0.6; }
@@ -255,8 +482,13 @@ export class Bot extends Actor {
     // 移动 & 武器
     this.move(dt, wishX, wishZ, this.wantJump, crouch, walk);
     this.wantJump = false;
+    const ammo = this.ammoDecision(now);
+    if (ammo) {
+      sw = ammo.sw ?? sw; reload = ammo.reload;
+      if (ammo.sw !== null) { fire = false; firePressed = false; alt = false; }
+    }
     const w = this.weapon;
-    this.weaponUpdate(dt, { fire, firePressed: firePressed || (fire && !this.fireHeld), alt, altPressed: alt, reload: false, sw });
+    if (!this.c4Selected) this.weaponUpdate(dt, { fire, firePressed: firePressed || (fire && !this.fireHeld), alt, altPressed: alt, reload, sw });
     this.fireHeld = fire;
     void w;
   }

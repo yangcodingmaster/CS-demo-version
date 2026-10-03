@@ -118,14 +118,23 @@ function freshProfile(src, list, legacyId, legacyPrimary, notes) {
 
 // 有可用背包数据：逐项修复背包 ID、数量、槽位与选中项
 function salvageProfile(src, list, notes) {
-  const used = new Set();
   const bags = [];
+  const idMap = new Map();   // 原始 ID -> 修复后的 ID；重复原始 ID 始终指向第一件背包
   if (list.length > BAG_COUNT) notes.push(`背包数量 ${list.length} 超过 ${BAG_COUNT} 个，已保留前 ${BAG_COUNT} 个`);
   const keep = Math.min(list.length, BAG_COUNT);
+  // 先预留保留范围内的合法原始 ID，缺失/重复项不能抢占后续背包的稳定 ID。
+  const originalIds = new Map();
+  for (let i = 0; i < keep; i++) {
+    const rb = isPlainObject(list[i]) ? list[i] : null;
+    if (rb && typeof rb.id === 'string' && rb.id.trim() !== '' && !originalIds.has(rb.id)) originalIds.set(rb.id, i);
+  }
+  const used = new Set(originalIds.keys());
   for (let i = 0; i < keep; i++) {
     const rb = isPlainObject(list[i]) ? list[i] : null;
     if (!rb) notes.push(`第 ${i + 1} 个背包数据无效，已用默认背包替代`);
-    const id = takeBagId(rb && rb.id, i, used, notes);
+    const rawId = rb && typeof rb.id === 'string' && rb.id.trim() !== '' ? rb.id : null;
+    const id = takeBagId(rb && rb.id, i, used, originalIds, notes);
+    if (rawId && !idMap.has(rawId)) idMap.set(rawId, id);
     bags.push(repairBag(rb, i, id, notes));
   }
   if (list.length < BAG_COUNT) notes.push(`背包数量不足，已补足 ${BAG_COUNT} 个`);
@@ -137,6 +146,12 @@ function salvageProfile(src, list, notes) {
   }
   const ids = bags.map((b) => b.id);
   let selected = src.selectedBackpackId;
+  // ID 被修复过的背包：选中项跟着这件背包走，不要跳到占据同名 ID 的另一件背包
+  if (typeof selected === 'string' && idMap.has(selected)) {
+    const mapped = idMap.get(selected);
+    if (mapped !== selected) notes.push(`selectedBackpackId ${selected} 随背包 ID 修复改为 ${mapped}`);
+    selected = mapped;
+  }
   if (typeof selected !== 'string' || !ids.includes(selected)) {
     notes.push(`selectedBackpackId ${text(selected)} 无效，改用 ${ids[0]}`);
     selected = ids[0];
@@ -170,10 +185,10 @@ function slotNote(bagId, slot, value, fallback) {
   return `${bagId}.${slot} 未知 ID ${text(value)}，回退 ${fallback}`;
 }
 
-// 稳定 ID 优先保留；缺失或重复时按位置分配 bag-N
-function takeBagId(rawId, index, used, notes) {
+// 同一原始 ID 只归首次出现的背包；其余项分配未被原始 ID 或已修复项占用的 bag-N。
+function takeBagId(rawId, index, used, originalIds, notes) {
   const named = typeof rawId === 'string' && rawId.trim() !== '';
-  if (named && !used.has(rawId)) { used.add(rawId); return rawId; }
+  if (named && originalIds.get(rawId) === index) return rawId;
   const id = freeBagId(index, used);
   used.add(id);
   notes.push(named ? `背包 ID ${rawId} 重复，已改用 ${id}` : `第 ${index + 1} 个背包缺少 ID，已改用 ${id}`);
@@ -230,20 +245,18 @@ export class Profile {
     return this._write(PROFILE_KEY, JSON.stringify(this.data));
   }
 
-  // 返回是否设置成功；存储不可用时仍保留本次会话的昵称
+  // 返回 { ok, saved }：ok 表示数据已应用，saved 表示是否成功写入本地存储
   setNickname(name) {
     const v = typeof name === 'string' ? name.trim() : '';
-    if (!v) return false;
+    if (!v) return { ok: false, saved: false, error: '昵称不能为空' };
     this.data.nickname = v;
-    this.save();
-    return true;
+    return { ok: true, saved: this.save() };
   }
 
   selectBackpack(bagId) {
-    if (!this.getBackpack(bagId)) return false;
+    if (!this.getBackpack(bagId)) return { ok: false, saved: false, error: `背包不存在：${text(bagId)}` };
     this.data.selectedBackpackId = bagId;
-    this.save();
-    return true;
+    return { ok: true, saved: this.save() };
   }
 
   getBackpack(bagId) {
@@ -270,11 +283,10 @@ export class Profile {
           : `装备不存在：${text(weaponId)}`,
       };
     }
-    if (bag[slot] !== weaponId) {
-      bag[slot] = weaponId;
-      this.save();
-    }
-    return { ok: true };
+    const changed = bag[slot] !== weaponId;
+    if (changed) bag[slot] = weaponId;
+    // saved=false 表示只改了内存档案、没写进本地存储，界面需要如实提示
+    return { ok: true, saved: this.save(), changed };
   }
 
   // 四槽都返回合法 ID；bagId 无效时退回当前背包

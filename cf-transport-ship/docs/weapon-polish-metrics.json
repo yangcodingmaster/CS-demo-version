@@ -1,0 +1,56 @@
+{
+  "source": "tools/capture-weapon-studio.mjs before-desert / after-desert",
+  "scope": "visible weapon meshes, excluding hands and muzzle effects",
+  "weapons": {
+    "ak47": {
+      "before": 3328,
+      "after": 2180,
+      "ratio": 0.655
+    },
+    "m4a1": {
+      "before": 3520,
+      "after": 3352,
+      "ratio": 0.9523
+    },
+    "awm": {
+      "before": 2472,
+      "after": 3016,
+      "ratio": 1.2201
+    },
+    "mp5": {
+      "before": 3436,
+      "after": 1764,
+      "ratio": 0.5134
+    },
+    "deagle": {
+      "before": 1344,
+      "after": 1296,
+      "ratio": 0.9643
+    },
+    "usp": {
+      "before": 1740,
+      "after": 1404,
+      "ratio": 0.8069
+    },
+    "glock18": {
+      "before": 1644,
+      "after": 1308,
+      "ratio": 0.7956
+    },
+    "knife": {
+      "before": 760,
+      "after": 690,
+      "ratio": 0.9079
+    },
+    "he": {
+      "before": 700,
+      "after": 604,
+      "ratio": 0.8629
+    }
+  },
+  "total": {
+    "before": 18944,
+    "after": 15614,
+    "changePercent": -17.58
+  }
+}

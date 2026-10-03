@@ -16,6 +16,12 @@ import { Bot, BOT_NAMES } from './bots.js';
 import { TouchControls } from './touch.js';
 import { Profile } from './profile.js';
 import { Screens } from './screens.js';
+import { buildBombMap } from './bomb-map.js';
+import { buildDesertMap } from './desert-map.js';
+import { bombMapId } from './map-catalog.js';
+import { BombRules } from './bomb-rules.js';
+import { BombVisual } from './bomb-visual.js';
+import { BombTactics, shouldCommitObjective } from './bomb-tactics.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const MULTI = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'MULTI KILL', 'ULTRA KILL', 'RAMPAGE', 'UNSTOPPABLE', 'GODLIKE'];
@@ -30,7 +36,10 @@ export class Game {
     this.score = { BL: 0, GR: 0 };
     this.audio = audio;
     this.qs = new URLSearchParams(location.search);
+    this.bombMapId = bombMapId(this.qs.get('bombMap'));
     this.startBagId = null;      // 初始背包选择屏的一次性覆盖，消费后回落到档案默认背包
+    this.mode = this.selectedMode = 'team';
+    this.bomb = null;
   }
   async init() {
     this.hud = new HUD(this);
@@ -50,8 +59,7 @@ export class Game {
     this.T = buildTextures(this.opts.quality);
     this.hud.loading(0.55, '搭建运输船');
     await nextFrame();
-    this.world = new World();
-    this.map = buildMap(this.renderer.scene, this.T, this.world);
+    this.loadMap('team');
     this.hud.loading(0.68, '天空与海洋');
     await nextFrame();
     this.env = new Environment(this.renderer.renderer, this.renderer.scene, this.opts.quality);
@@ -60,10 +68,10 @@ export class Game {
     this.fx = new Effects(this.renderer.scene, this.T, this.renderer.camera);
     this.fx.initAmbient(this.map.funnelTop);
     this.vm = new ViewModel(this.renderer.vmScene, this.T, this.opts.team);
+    this.bombVisual = new BombVisual(this.renderer.scene, this.renderer.vmScene);
     this.hud.loading(0.8, '计算寻路网格');
     await nextFrame();
-    this.nav = new NavGrid(this.world, -36.2, -12.1, 36.2, 12.1, 0.5, 0.42);
-    this.hud.buildRadar(this.world);
+    this.hud.buildRadar(this.world, this.map);
     this.hud.loading(0.88, '武器图标 / 预编译着色器');
     await nextFrame();
     const icons = this.makeIcons();
@@ -89,8 +97,41 @@ export class Game {
     for (const p of this.map.lampSpots.slice(0, this.opts.quality === 'low' ? 0 : 4)) {
       const l = new THREE.PointLight(0xffd9a0, 5, 9, 1.8);
       l.position.copy(p);
-      this.renderer.scene.add(l);
+      this.mapRoot.add(l);
     }
+  }
+  loadMap(mode) {
+    const id = mode === 'bomb' ? bombMapId(this.bombMapId) : 'transport-ship';
+    if (this.map?.id === id) return;
+    if (this.mapRoot) {
+      this.renderer.scene.remove(this.mapRoot);
+      if (this.map.dispose) this.map.dispose();
+      else {
+        const geometries = new Set(), materials = new Set();
+        this.mapRoot.traverse((o) => {
+          if (o.geometry) geometries.add(o.geometry);
+          for (const m of o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []) materials.add(m);
+          if (o.customDepthMaterial) materials.add(o.customDepthMaterial);
+          if (o.customDistanceMaterial) materials.add(o.customDistanceMaterial);
+        });
+        for (const geo of geometries) geo.dispose();
+        for (const mat of materials) mat.dispose();
+        for (const texture of this.map.ownedTextures || []) texture.dispose();
+      }
+    }
+    this.mapRoot = new THREE.Group();
+    this.renderer.scene.add(this.mapRoot);
+    this.world = new World();
+    const build = id === 'desert-gray' ? buildDesertMap : id === 'bomb-test' ? buildBombMap : buildMap;
+    this.map = build(this.mapRoot, this.T, this.world);
+    this.map.id = id;
+    this.map.name ||= '运输船';
+    const bounds = this.map.navBounds || [-36.2, -12.1, 36.2, 12.1];
+    this.nav = new NavGrid(this.world, ...bounds, 0.5, 0.42);
+    if (this.env) this.env.setMapKind(mode === 'bomb' ? 'land' : 'ship', this.map.shadowBounds);
+    if (this.fx) this.fx.setMap(this.map);
+    this.hud.buildRadar(this.world, this.map);
+    if (this.env) this.lampLights();
   }
   makeIcons() {
     const r = this.renderer.renderer;
@@ -132,18 +173,32 @@ export class Game {
   // ================= 流程 =================
   // 主页 → 团队模式设置 → 选择初始背包 → 对局
   startTeamMatch() {
+    this.mode = this.selectedMode = 'team';
+    this.bomb = null;
     this.screens.closeAll();
     this.startMatch();
   }
+  startBombMatch(options = {}) {
+    const { mapId = this.bombMapId, ...rules } = options;
+    this.bombMapId = bombMapId(mapId);
+    this.mode = this.selectedMode = 'bomb';
+    this.bomb = new BombRules({ now: this.time, ...rules });
+    this.screens.closeAll();
+    this.startMatch();
+  }
+  startSelectedMatch() { if (this.selectedMode === 'bomb') this.startBombMatch(); else this.startTeamMatch(); }
+  restartMatch() { if (this.mode === 'bomb') this.startBombMatch(); else this.startTeamMatch(); }
   startMatch() {
     const o = this.opts;
     audio.init(); audio.setVolumes({ master: o.vol }); audio.startAmbient(); audio.playUI('start');
-    for (const a of this.actors) this.renderer.scene.remove(a.soldier.root);
-    for (const t of this.tags) this.renderer.scene.remove(t.sprite);
-    for (const n of this.nades) this.renderer.scene.remove(n.mesh);
-    this.actors = []; this.nades = []; this.tags = []; this.timers = [];
+    this.clearMatchObjects();
+    this.loadMap(this.mode);
+    this.bombTactics = this.bomb ? new BombTactics(this) : null;
+    this.fx.clear();
+    this.bombVisual.reset();
+    this.timers = [];
     this.score = { BL: 0, GR: 0 };
-    this.goal = o.goal; this.timeLeft = 600;
+    this.goal = this.bomb ? this.bomb.config.roundsToWin : o.goal; this.timeLeft = this.bomb ? this.bomb.config.preparationSeconds : 600;
     this.env.apply(o.tod);
     const my = o.team, other = my === 'BL' ? 'GR' : 'BL';
     const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
@@ -158,7 +213,7 @@ export class Game {
     this.player.pendingBagId = null; this.player.nextLoadout = null;
     this.player.bind(document.getElementById('c'));
     this.actors.push(this.player);
-    const N = o.size;
+    const N = this.bomb ? this.bomb.config.teamSize : o.size;
     const prim = (team, i) => {
       if (i === 1 && N >= 4) return 'awm';
       if (i === 3 && N >= 6) return 'mp5';
@@ -175,13 +230,46 @@ export class Game {
       }
     }
     for (const a of this.actors) this.spawnActor(a, true);
+    if (this.bomb) {
+      this.bomb.beginRound(this.time, this.actors);
+      this.bomb.drainEvents();
+      this.score = this.bomb.score;
+    }
     this.vm.setTeam(my); this.vm.equip(this.player.weapon.id, 0.6);
     this.hud.slots(this.player.inv, 0);
     this.playing = true; this.paused = false; this.ended = false;
     this.hud.show(null);
     this.lock();
-    setTimeout(() => audio.announce('Go go go!'), 400);
-    this.hud.toast(`团队竞技 · 率先达到 <b style="color:#f5b321">${this.goal}</b> 击杀的队伍获胜`, 3.5);
+    if (this.bomb) this.hud.toast(`${this.map.name} · ${this.bomb.attackTeam === my ? '进攻方：携带 C4 前往 A/B 区' : '防守方：守住 A/B 区，安包后拆除 C4'}`, 4);
+    else {
+      this.timers.push({ t: this.time + 0.4, fn: () => audio.announce('Go go go!') });
+      this.hud.toast(`团队竞技 · 率先达到 <b style="color:#f5b321">${this.goal}</b> 击杀的队伍获胜`, 3.5);
+    }
+  }
+  // 释放一局独占的 GPU 资源；合并枪械（含飞行手雷）和士兵几何按 ID 缓存，不能逐实例销毁。
+  clearMatchObjects() {
+    const scene = this.renderer.scene;
+    for (const t of this.tags) {
+      const sp = t.sprite;
+      if (!sp) continue;
+      if (sp.material) { if (sp.material.map) sp.material.map.dispose(); sp.material.dispose(); }
+      scene.remove(sp);
+    }
+    this.tags = [];
+    for (const a of this.actors) {
+      if (!a.soldier) continue;
+      const s = a.soldier;
+      // 士兵几何体按队伍缓存、贴图由 atlas() 缓存，二者共享不能释放；
+      // 材质与骨架（骨骼贴图）是每个实例独占的，必须释放，否则每局都会留下 GPU 纹理
+      if (s.mesh && s.mesh.skeleton) s.mesh.skeleton.dispose();
+      if (s.material) s.material.dispose();
+      scene.remove(s.root);
+    }
+    this.actors = [];
+    for (const n of this.nades) {
+      if (n.mesh) scene.remove(n.mesh);
+    }
+    this.nades = [];
   }
   addTag(b) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 48;
@@ -196,7 +284,7 @@ export class Game {
     this.tags.push({ sprite: s, actor: b });
   }
   spawnActor(a, first) {
-    const pts = this.map.spawns[a.team];
+    const pts = this.bomb ? this.map.spawns[a.team === this.bomb.attackTeam ? 'attack' : 'defend'] : this.map.spawns[a.team];
     let best = null, bestScore = -1e9;
     for (const p of pts) {
       let sc = Math.random() * 3;
@@ -210,6 +298,8 @@ export class Game {
     }
     const prevBag = a.isPlayer ? a.activeBagId : null;
     a.spawn(best);
+    a.c4Selected = false; a.c4ReturnSlot = 0;
+    if (this.bomb) { a.protectT = 0; a.respawnT = Infinity; }
     if (a instanceof Bot) a.onSpawn();
     if (a.isPlayer) {
       a.deathCam = null;
@@ -253,10 +343,11 @@ export class Game {
     this.playing = false; this.paused = false; this.ended = true;
     this.closeBagPanel(true);
     audio.stopAmbient(); audio.setLowHealth(false);
-    for (const a of this.actors) this.renderer.scene.remove(a.soldier.root);
-    for (const t of this.tags) this.renderer.scene.remove(t.sprite);
-    this.actors = []; this.tags = [];
+    this.clearMatchObjects();
+    this.timers = [];
     this.player = null;
+    this.bomb = null;
+    this.bombVisual.reset();
     this.vm.setVisible(false);
     if (document.pointerLockElement) document.exitPointerLock();
     this.showHome();
@@ -275,11 +366,20 @@ export class Game {
     this.screens.show('personal');
   }
   showTeamSetup() {
+    this.selectedMode = 'team';
     this.settingsReturn = 'home';
     this.screens.show(null);
     this.hud.show('menu', { hideHud: true });
     this.setMenuBackLabel('返回主页');
   }
+  showBombSetup() {
+    this.selectedMode = 'bomb';
+    this.settingsReturn = 'home';
+    this.screens.show(null);
+    this.hud.show('menu', { hideHud: true });
+    this.setMenuBackLabel('返回主页');
+  }
+  showSelectedSetup() { if (this.selectedMode === 'bomb') this.showBombSetup(); else this.showTeamSetup(); }
   showSettings() {
     // 设置屏复用运输船设置，返回目标取决于从哪一屏进来
     this.settingsReturn = this.screens.visible === 'home' ? 'home' : 'personal';
@@ -330,10 +430,20 @@ export class Game {
     const p = this.player;
     const bag = this.profile.getBackpack(bagId);
     if (!p || !bag) return false;
+    if (this.bomb && p.alive && this.bomb.phase !== 'preparation') {
+      this.hud.toast('当前回合已锁定背包，请在准备阶段或阵亡后选择', 2);
+      return false;
+    }
     if (bagId === p.activeBagId && !p.pendingBagId) { this.hud.toast(`${bag.name} 正在使用中`, 1.6); return true; }
     const l = this.profile.getLoadout(bagId);
     p.pendingBagId = bagId; p.nextLoadout = l;
-    this.hud.toast(`下次复活使用 <b style="color:#f5b321">${bag.name}</b> · ${WEAPONS[l.primary].name}`, 2.0);
+    if (this.bomb?.phase === 'preparation') {
+      p.activeBagId = bagId; p.pendingBagId = null; p.nextLoadout = null;
+      p.giveLoadout(l); p.pendingThrow = p.autoSwitchAt = p.reScope = 0;
+      p.c4Selected = false; this.onSwitch(p);
+    }
+    const when = this.bomb ? (this.bomb.phase === 'preparation' ? '已装备' : '下一回合使用') : '下次复活使用';
+    this.hud.toast(`${when} <b style="color:#f5b321">${bag.name}</b> · ${WEAPONS[l.primary].name}`, 2.0);
     audio.playUI('buy');
     return true;
   }
@@ -346,17 +456,210 @@ export class Game {
   }
   endMatch() {
     this.ended = true; this.playing = false;
+    // 结算时统一收起局内面板：否则背包面板会盖住结算页与「返回主页」按钮
+    this.closeBagPanel(true);
+    if (this.screens) this.screens.show(null);
+    this.hud.scoreboard(false);
     const my = this.player.team, other = my === 'BL' ? 'GR' : 'BL';
     const win = this.score[my] === this.score[other] ? null : this.score[my] > this.score[other];
-    this.hud.endScreen(win, this.score, this.actors, this.player.id);
+    this.hud.endScreen(win, this.score, this.actors, this.player.id, this.bomb ? { round: this.bomb.round, maxRounds: this.bomb.config.maxRounds } : null);
     audio.playUI('roundEnd'); audio.setLowHealth(false);
     audio.announce(win ? 'Mission accomplished' : win === null ? 'Draw' : 'Mission failed');
     if (document.pointerLockElement) document.exitPointerLock();
     this.vm.setVisible(false);
+    this.bombVisual.reset();
+  }
+
+  // ================= 爆破任务 =================
+  canFight() { return this.playing && !this.ended && (!this.bomb || this.bomb.active); }
+  isInteracting(a) { return !!this.bomb?.interactions.has(a.id); }
+  setC4Selected(a, selected) {
+    if (!a || this.isInteracting(a)) return false;
+    if (selected && (!this.bomb || this.bomb.carrierId !== a.id || this.bomb.bomb.state !== 'carried')) {
+      if (a.isPlayer) this.hud.toast('你没有携带 C4', 1.2);
+      return false;
+    }
+    if (selected && !a.c4Selected) a.c4ReturnSlot = a.slot;
+    a.c4Selected = selected;
+    a.scoped = 0; a.reScope = 0; a.pendingThrow = 0; a.autoSwitchAt = 0;
+    if (a.isPlayer && !selected && a.weapon) this.vm.equip(a.weapon.id, 0.25);
+    return true;
+  }
+  siteAt(a) {
+    return this.map.sites?.find((s) => Math.hypot(a.pos.x - s.x, a.pos.z - s.z) <= s.radius && Math.abs(a.pos.y - s.y) < 0.5);
+  }
+  canReachBomb(a, distance) {
+    const p = this.bomb?.bomb.position;
+    if (!p || a.pos.distanceTo(p) > distance) return false;
+    const eye = a.eye(new THREE.Vector3());
+    const dir = new THREE.Vector3(p.x, p.y + 0.15, p.z).sub(eye);
+    const len = dir.length(); dir.normalize();
+    return !this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, Math.max(0, len - 0.08), 'sight');
+  }
+  validObjective(a, held) {
+    if (!this.bomb?.active || !a.alive || !held || !a.onGround || a.crouch || a.speed > 0.35) return null;
+    if (a.isPlayer && (this.uiBlocking() || a.keys.has('Space') || a.keys.has('KeyC') || ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => a.keys.has(k)))) return null;
+    if (this.bomb.phase === 'live' && this.bomb.carrierId === a.id && a.c4Selected) {
+      const site = this.siteAt(a);
+      if (site) return { kind: 'plant', siteId: site.id, position: { x: a.pos.x, y: site.y, z: a.pos.z } };
+    }
+    if (this.bomb.phase === 'planted' && a.team === this.bomb.defendTeam && this.canReachBomb(a, this.bomb.config.defuseMaxDistanceMeters)) return { kind: 'defuse' };
+    return null;
+  }
+  updateObjective(a, held) {
+    const objective = this.validObjective(a, held);
+    if (!objective) { this.bomb.cancelInteraction(a.id); return false; }
+    const existing = this.bomb.interactions.get(a.id);
+    this.bomb.beginInteraction(a.id, objective.kind, this.time, objective);
+    if (this.isInteracting(a)) {
+      if (!existing) this.bomb.interactions.get(a.id).actorPosition = { x: a.pos.x, y: a.pos.y, z: a.pos.z };
+      a.scoped = 0; a.pendingThrow = a.autoSwitchAt = a.reScope = 0;
+      return true;
+    }
+    return false;
+  }
+  pickupC4(a) {
+    if (!a.alive || a.team !== this.bomb?.attackTeam || !this.canReachBomb(a, this.bomb.config.pickupMaxDistanceMeters)) return false;
+    if (!this.bomb.pickup(a.id, this.actors)) return false;
+    if (a.isPlayer) this.hud.toast('已拾取 C4，按 5 选择后在 A/B 区按住 E 安放', 2.5);
+    return true;
+  }
+  updatePlayerObjective(a, { select, held, pickup }) {
+    if (!this.bomb) return;
+    if (select) this.setC4Selected(a, true);
+    if (pickup && this.bomb.bomb.state === 'dropped') this.pickupC4(a);
+    this.updateObjective(a, held);
+  }
+  getBombTask(a) {
+    if (!this.bomb) return null;
+    this.bombTactics ||= new BombTactics(this);
+    return this.bombTactics.getTask(a);
+  }
+  shouldBotInteract(a, task) { return shouldCommitObjective(this, a, task); }
+  reportBombTaskBlocked(a, task) { this.bombTactics?.reportBlocked(a, task); }
+  updateBotObjective(a) {
+    if (!this.bomb || !a.alive) return;
+    const task = this.getBombTask(a);
+    const close = task && Math.hypot(a.pos.x - task.goal.x, a.pos.z - task.goal.z) < 0.7;
+    if (close && task.interact === 'pickup') this.pickupC4(a);
+    // 赶路或交火横移时也更新安全观察期，不能只记住最后一次站在包旁的威胁。
+    const committed = this.shouldBotInteract(a, task);
+    a.objectiveHeld = !!(close && committed);
+    if (a.objectiveHeld && task.interact === 'plant') this.setC4Selected(a, true);
+    this.updateObjective(a, a.objectiveHeld);
+    if (!a.objectiveHeld && a.c4Selected && !this.isInteracting(a)) this.setC4Selected(a, false);
+  }
+  validateBombInteractions() {
+    if (!this.bomb) return;
+    for (const [id, interaction] of this.bomb.interactions) {
+      const a = this.actors.find((x) => x.id === id);
+      const valid = a && this.validObjective(a, a.isPlayer ? a.keys.has('KeyE') : a.objectiveHeld);
+      const anchor = interaction.actorPosition;
+      const moved = a && anchor && (Math.hypot(a.pos.x - anchor.x, a.pos.z - anchor.z) > 0.01 || Math.abs(a.pos.y - anchor.y) > 0.1);
+      if (!valid || moved || valid.kind !== interaction.kind || (interaction.kind === 'plant' && valid.siteId !== interaction.siteId)) this.bomb.cancelInteraction(id);
+    }
+  }
+  beginBombRound() {
+    this.timers = [];
+    this.fx.clear();
+    for (const n of this.nades) this.renderer.scene.remove(n.mesh);
+    this.nades = [];
+    this.clearInput(); this.aimTarget = null; this.killedBy = ''; this.spectatorId = null;
+    this.dmgFlash = 0;
+    this.closeBagPanel(true); this.screens.show(null);
+    for (const a of this.actors) { a.objectiveHeld = false; a.objectiveSafeAfter = 0; this.spawnActor(a); }
+    this.bomb.beginRound(this.time, this.actors);
+    this.bombResult = null;
+    this.hud.toast(`第 ${this.bomb.round} 回合 · ${this.bomb.attackTeam === this.player.team ? '进攻方' : '防守方'}${this.bomb.round === this.bomb.config.roundsBeforeSideSwap + 1 ? ' · 已换边' : ''}`, 3);
+  }
+  processBombEvents() {
+    for (const e of this.bomb.drainEvents()) {
+      if (e.type === 'round-start') this.beginBombRound();
+      if (e.type === 'round-live') {
+        this.clearInput();
+        for (const a of this.actors) a.protectT = 0;
+        audio.announce('Go go go!');
+      }
+      if (e.type === 'bomb-planted') {
+        for (const a of this.actors) {
+          a.c4Selected = false; a.objectiveHeld = false;
+          if (a.isPlayer && a.alive) this.vm.equip(a.weapon.id, 0.25);
+        }
+        this.hud.toast(`C4 已安放在 ${e.siteId} 区 · 防守方按住 E 拆除`, 3);
+        audio.playUI('buy');
+      }
+      if (e.type === 'bomb-exploded') {
+        const p = new THREE.Vector3().copy(this.bomb.bomb.position);
+        this.fx.explosion(p); audio.playExplosion(p);
+      }
+      if (e.type === 'round-result') {
+        this.bombResult = e;
+        this.clearInput(); this.timers = [];
+        for (const n of this.nades) this.renderer.scene.remove(n.mesh);
+        this.nades = [];
+        for (const a of this.actors) { a.pendingThrow = a.autoSwitchAt = a.reScope = 0; a.objectiveHeld = false; a.c4Selected = false; }
+        this.hud.toast(`${e.winner === this.player.team ? '本回合胜利' : '本回合失败'} · ${this.bombReason(e.reason)}`, this.bomb.config.resultSeconds);
+        audio.playUI('roundEnd');
+      }
+      if (e.type === 'match-result') this.endMatch();
+    }
+    this.score = this.bomb.score;
+    this.timeLeft = Math.max(0, this.bomb.deadline - this.time);
+  }
+  bombReason(reason) {
+    return ({ 'attackers-eliminated': '进攻方全灭', 'defenders-eliminated': '防守方全灭', 'both-eliminated': '双方全灭', 'round-timeout': '回合时间耗尽', 'bomb-exploded': 'C4 爆炸', 'bomb-defused': 'C4 已拆除' })[reason] || '';
+  }
+  getSpectatorActor() {
+    const friends = this.actors.filter((a) => a.alive && a.team === this.player.team && a !== this.player);
+    const current = friends.find((a) => a.id === this.spectatorId) || friends[0];
+    this.spectatorId = current?.id ?? null;
+    return current || null;
+  }
+  cycleSpectator() {
+    const friends = this.actors.filter((a) => a.alive && a.team === this.player.team && a !== this.player);
+    const i = friends.findIndex((a) => a.id === this.spectatorId);
+    this.spectatorId = friends[(i + 1) % friends.length]?.id ?? null;
+  }
+  updateBombSpectator() {
+    const cam = this.renderer.camera, followed = this.getSpectatorActor();
+    if (followed) { followed.eye(cam.position); cam.rotation.order = 'YXZ'; cam.rotation.set(followed.pitch, followed.yaw, 0); }
+    else {
+      const p = this.map.spectator;
+      cam.position.set(p.x, p.y, p.z); cam.lookAt(p.lookX, p.lookY, p.lookZ);
+    }
+    cam.fov = this.opts.fov; cam.updateProjectionMatrix();
+  }
+  bombHUD() {
+    if (!this.bomb) return null;
+    const B = this.bomb, p = this.player, interaction = B.interactions.get(p.id);
+    let hint = '5 选择 C4 · 按住 E 安放或拆除 · Q 切回武器';
+    if (B.phase === 'preparation') hint = '准备阶段可以按 B 换背包，开局后锁定';
+    else if (B.phase === 'result') hint = this.bombReason(this.bombResult?.reason);
+    else if (B.bomb.state === 'dropped') hint = p.team === B.attackTeam ? 'C4 已掉落，靠近后按 E 拾取' : '守住 A/B 区，阻止进攻方安包';
+    else if (B.phase === 'planted') hint = p.team === B.defendTeam ? '靠近 C4 站定，按住 E 拆除' : '保护 C4，等待倒计时结束';
+    else if (B.carrierId === p.id) hint = p.c4Selected ? '进入 A/B 区站定，按住 E 安放 C4' : '你携带 C4，按 5 选择';
+    else if (p.team === B.defendTeam) hint = '守住 A/B 区，阻止安包';
+    if (!p.alive) hint = '等待下一回合 · Q 切换存活队友 · B 选择下轮背包';
+    return {
+      phase: B.phase,
+      round: B.round,
+      maxRounds: B.config.maxRounds,
+      attackTeam: B.attackTeam,
+      deadlineLeft: Math.max(0, B.deadline - this.time),
+      bombState: p.team !== B.attackTeam && ['carried', 'dropped'].includes(B.bomb.state) ? 'unplanted' : B.bomb.state,
+      carrierName: this.actors.find((a) => a.id === B.carrierId && a.team === p.team)?.name || '',
+      siteId: B.bomb.siteId,
+      interaction: interaction ? { kind: interaction.kind, progress: B.interactionProgress(p.id, this.time) } : null,
+      hint,
+      role: p.team === B.attackTeam ? '进攻方' : '防守方',
+      spectatingName: !p.alive ? (this.getSpectatorActor()?.name || '固定场地视角') : '',
+      score: B.score,
+    };
   }
 
   // ================= 战斗 =================
   fireWeapon(a, ws, spread) {
+    if (this.bomb && (!this.canFight() || this.isInteracting(a) || a.c4Selected)) return;
     const d = ws.def;
     const eye = a.eye(new THREE.Vector3());
     const dir = a.forward(new THREE.Vector3());
@@ -440,6 +743,7 @@ export class Game {
     return o.clone().addScaledVector(dir, range);
   }
   melee(a, heavy) {
+    if (this.bomb && (!this.canFight() || this.isInteracting(a) || a.c4Selected)) return;
     const d = WEAPONS.knife;
     const range = heavy ? d.rangeHeavy : d.rangeLight;
     const eye = a.eye(new THREE.Vector3());
@@ -482,6 +786,7 @@ export class Game {
     });
   }
   throwGrenade(a) {
+    if (this.bomb && (!this.canFight() || this.isInteracting(a) || a.c4Selected)) return;
     const eye = a.eye(new THREE.Vector3());
     const dir = a.forward(new THREE.Vector3());
     const right = new THREE.Vector3(Math.cos(a.yaw), 0, -Math.sin(a.yaw));
@@ -489,7 +794,7 @@ export class Game {
     const vel = dir.clone().multiplyScalar(16).add(new THREE.Vector3(0, 2.8, 0)).addScaledVector(a.vel, 0.6);
     const mesh = buildGunMerged('he'); mesh.scale.setScalar(1.3);
     mesh.position.copy(pos); this.renderer.scene.add(mesh);
-    this.nades.push({ mesh, pos, vel, fuse: WEAPONS.he.fuse, owner: a, spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, 0) });
+    this.nades.push({ mesh, pos, vel, fuse: WEAPONS.he.fuse, explodeAt: this.time + WEAPONS.he.fuse, owner: a, spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, 0) });
     audio.playGrenadeThrow();
     if (a.isPlayer) audio.announce('Fire in the hole!');
     for (const b of this.actors) if (b.hear && b.team !== a.team && b.pos.distanceTo(pos) < 20) b.hear(pos, false);
@@ -497,7 +802,9 @@ export class Game {
   updateNades(dt) {
     const W = this.world;
     this.nades = this.nades.filter((n) => {
-      n.fuse -= dt;
+      // 绝对模拟时刻避免连续减 dt 留下极小正数，把仿真锁在同一事件边界。
+      n.explodeAt ??= this.time - dt + n.fuse;
+      n.fuse = n.explodeAt - this.time;
       const steps = 3, h = dt / steps;
       for (let s = 0; s < steps; s++) {
         n.vel.y -= 14 * h;
@@ -543,6 +850,11 @@ export class Game {
     for (const b of this.actors) if (b.hear && b.pos.distanceTo(p) < 40) b.hear(p, true);
   }
   damage(v, att, amt, part, wid, dir, wall, melee) {
+    if (this.bomb && !this.canFight()) return;
+    if (this.bomb && this._simulatingBomb && !this._applyingDamage) {
+      this._damageBatch.push([v, att, amt, part, wid, dir.clone(), wall, melee]);
+      return;
+    }
     if (!v.alive || v.protectT > 0) return;
     if (att && att !== v && att.team === v.team) return;
     const def = WEAPONS[wid];
@@ -570,14 +882,17 @@ export class Game {
     if (killed) this.kill(v, att, wid, part === 'head' && !melee, wall, dir);
   }
   kill(v, att, wid, hs, wall, dir) {
-    v.alive = false; v.hp = 0; v.deadT = 0; v.respawnT = 4.0; v.stats.d++;
+    if (!v.alive) return;
+    v.alive = false; v.hp = 0; v.deadT = 0; v.respawnT = this.bomb ? Infinity : 4.0; v.stats.d++;
+    v.pendingThrow = v.autoSwitchAt = v.reScope = 0; v.c4Selected = false;
+    if (this.bomb) { this.bomb.cancelInteraction(v.id); this.bomb.dropCarrier(v.id, { x: v.pos.x, y: Math.max(0, v.pos.y), z: v.pos.z }); }
     v.scoped = 0;
     v.soldier.die(dir.x, dir.z, hs);
     audio.playDeath(v.soldier.chestWorld(new THREE.Vector3()));
     const p = this.player;
     if (att && att !== v) {
       att.stats.k++; if (hs) att.stats.hs++;
-      this.score[att.team]++;
+      if (!this.bomb) this.score[att.team]++;
       att.multi = this.time - att.lastKillT < 5 ? att.multi + 1 : 1;
       att.lastKillT = this.time; att.streak++;
     }
@@ -585,8 +900,8 @@ export class Game {
     if (att === p && v !== p) {
       const m = Math.min(att.multi, 8);
       let text, sub = `击杀 ${v.name}`;
-      if (m >= 2) { text = MULTI[m]; sub = MULTI_CN[m] + ' · ' + sub; setTimeout(() => audio.announce(MULTI[m].toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) + '!'), 150); }
-      else if (hs) { text = 'HEADSHOT'; sub = '爆头 · ' + sub; setTimeout(() => audio.announce('Headshot!'), 150); }
+      if (m >= 2) { text = MULTI[m]; sub = MULTI_CN[m] + ' · ' + sub; this.timers.push({ t: this.time + 0.15, fn: () => audio.announce(MULTI[m].toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) + '!') }); }
+      else if (hs) { text = 'HEADSHOT'; sub = '爆头 · ' + sub; this.timers.push({ t: this.time + 0.15, fn: () => audio.announce('Headshot!') }); }
       else if (wid === 'knife') { text = 'KNIFE KILL'; sub = '刀杀 · ' + sub; }
       else if (wid === 'he') { text = 'GRENADE KILL'; sub = '手雷击杀 · ' + sub; }
       else if (wall) { text = 'WALLBANG'; sub = '穿墙击杀 · ' + sub; }
@@ -595,14 +910,17 @@ export class Game {
       audio.playKillConfirm(hs);
     }
     if (v === p) {
-      p.startDeathCam(att);
+      if (this.bomb) { p.deathCam = null; p.soldier.root.visible = true; this.aimTarget = null; }
+      else p.startDeathCam(att);
       this.vm.setVisible(false);
       audio.setLowHealth(false);
       const wn = WEAPONS[wid]?.name || wid;
       this.killedBy = att && att !== v ? `被 <span style="color:${att.team === 'BL' ? '#ff9b70' : '#8cc8ff'}">${att.name}</span> 用 ${wn}${hs ? ' <span style="color:#ff5040">爆头</span>' : ''}击杀` : '你阵亡了';
     }
     this.fx.bloodSplat(v.pos);
-    if (this.score.BL >= this.goal || this.score.GR >= this.goal) setTimeout(() => { if (this.playing) this.endMatch(); }, 1200);
+    if (!this.bomb && (this.score.BL >= this.goal || this.score.GR >= this.goal)) {
+      this.timers.push({ t: this.time + 1.2, fn: () => { if (this.playing && !this.bomb) this.endMatch(); } });
+    }
   }
 
   // ================= 事件音效 =================
@@ -658,6 +976,34 @@ export class Game {
     return { score: this.score, time: this.time.toFixed(1), kills: this.actors.map((a) => a.name + ':' + a.stats.k + '/' + a.stats.d).join(' ') };
   }
   simulate(dt) {
+    if (this.paused || !this.playing || dt <= 0) return;
+    if (!this.bomb) { this.simulateStep(dt); return; }
+    // 按模拟事件边界切段，避免低帧率让较晚死亡否定较早安包。
+    const target = this.time + dt;
+    while (this.playing && this.time < target - 1e-9) {
+      let next = Math.min(target, this.time + 0.025, this.bomb.nextEventTime());
+      for (const t of this.timers) if (t.t > this.time) next = Math.min(next, t.t);
+      for (const n of this.nades) next = Math.min(next, n.explodeAt ?? this.time + Math.max(0, n.fuse));
+      if (next <= this.time) {
+        // 消费已到期的外部事件，然后处理同刻安拆与截止，不能只推进规则时钟。
+        this.updateNades(0);
+        this.validateBombInteractions();
+        this.bomb.advance(this.time, this.actors); this.processBombEvents();
+        if (this.bomb.nextEventTime() <= this.time && this.playing) throw new Error('爆破事件时钟未推进');
+        continue;
+      }
+      this._simulatingBomb = true; this._damageBatch = [];
+      this.simulateStep(next - this.time);
+      // 同刻归并伤害，再校验存活状态与交互，最后结算胜负。
+      this._applyingDamage = true;
+      for (const args of this._damageBatch) this.damage(...args);
+      this._applyingDamage = false; this._simulatingBomb = false;
+      this.validateBombInteractions();
+      this.bomb.advance(this.time, this.actors);
+      this.processBombEvents();
+    }
+  }
+  simulateStep(dt) {
     const cam = this.renderer.camera;
     {
       this.time += dt;
@@ -683,15 +1029,19 @@ export class Game {
           a.deadT += dt;
           a.soldier.update(dt, {});
           a.respawnT -= dt;
-          if (a.respawnT <= 0 && !this.ended) this.spawnActor(a);
+          if (!this.bomb && a.respawnT <= 0 && !this.ended) this.spawnActor(a);
         }
       }
       this.updateNades(dt);
-      if (this.timeLeft <= 0 && !this.ended) this.endMatch();
+      if (!this.bomb && this.timeLeft <= 0 && !this.ended) this.endMatch();
       // 队友名字
       for (const t of this.tags) {
         const a = t.actor;
         t.sprite.visible = a.alive && a.pos.distanceTo(cam.position) < 45;
+        if (this.bomb && t.sprite.visible) {
+          const d = a.soldier.headWorld(new THREE.Vector3()).sub(cam.position), len = d.length(); d.normalize();
+          t.sprite.visible = a.id !== this.spectatorId && !this.world.raycast(cam.position.x, cam.position.y, cam.position.z, d.x, d.y, d.z, Math.max(0, len - 0.15), 'sight');
+        }
         if (t.sprite.visible) { a.soldier.headWorld(t.sprite.position); t.sprite.position.y += 0.42; }
       }
     }
@@ -704,19 +1054,24 @@ export class Game {
       if (this.frame % 6 === 0 || !this.lightK) this.updateLightProbe();
       this.frame++;
       const sunCam = this.env.sunDir.clone().applyQuaternion(cam.quaternion.clone().invert());
-      this.vm.setVisible(p.alive && !(p.scoped && p.weapon.def.type === 'sniper'));
+      this.vm.setVisible(p.alive && !p.c4Selected && !(p.scoped && p.weapon.def.type === 'sniper'));
       this.vm.update(dt, { speed: p.speed || 0, onGround: p.onGround, crouch: p.crouch, lookDX: p.lookDX, lookDY: p.lookDY, sunDirCam: sunCam, light: this.lightK, indoor: this.indoorK > 0.5 });
       R.vmScene.environmentIntensity = 0.75 * (0.35 + 0.65 * (1 - this.indoorK));
     }
     this.fx.update(dt, this.realTime, cam, this.env.shipSpeed);
     this.env.update(dt, this.realTime, cam.position);
     this.map.update(dt, this.realTime);
+    this.bombVisual.update(this.bomb, this.player, this.time, this.playing);
+    if (this.bomb && this.player) {
+      const followed = this.player.alive ? null : this.getSpectatorActor();
+      for (const a of this.actors) if (!a.isPlayer) a.soldier.root.visible = a !== followed;
+    }
     // 帧率统计与画质建议
     this.fpsAcc = (this.fpsAcc || 0) + dt; this.fpsN = (this.fpsN || 0) + 1;
     if (this.fpsAcc > 1) {
       this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0;
       const lbl = document.querySelector('#radarWrap .lbl');
-      if (lbl) lbl.textContent = `运输船 · ${this.fps} FPS`;
+      if (lbl) lbl.textContent = `${this.map.name} · ${this.fps} FPS`;
       if (this.playing && !this.paused && this.time > 8 && !this.fpsHinted && this.fps < 32 && this.opts.quality !== 'low') {
         this.fpsHinted = true;
         this.hud.toast('帧率较低：可按 Esc 在主菜单把画质调到「均衡」或「流畅」', 5);
@@ -735,7 +1090,7 @@ export class Game {
     fxu.uDamage.value = this.dmgFlash;
     const p = this.player;
     fxu.uLowHP.value = p && p.alive && this.playing ? Math.max(0, (35 - p.hp) / 35) : 0;
-    fxu.uDeath.value = p && !p.alive && this.playing ? Math.min(1, p.deadT * 2) : 0;
+    fxu.uDeath.value = p && !p.alive && this.playing && !this.bomb ? Math.min(1, p.deadT * 2) : 0;
     fxu.uProtect.value = p && p.alive && this.playing ? Math.min(1, p.protectT) : 0;
     fxu.uVignette.value = p && p.scoped ? 0 : 0.3;
     R.render();
@@ -770,13 +1125,21 @@ export class Game {
       }
       this.aimTarget = best;
     }
-    if (this.aimTarget && this.aimTarget.alive) { aimName = this.aimTarget.name; aimTeam = this.aimTarget.team; }
+    if (p.alive && this.aimTarget && this.aimTarget.alive) { aimName = this.aimTarget.name; aimTeam = this.aimTarget.team; }
     this.hud.update(dt, {
       score: this.score, timeLeft: this.timeLeft, goal: this.goal, myTeam: p.team,
+      roster: this.actors.map((a) => ({ id: a.id, team: a.team, alive: a.alive })),
+      myId: p.id,
+      personalStats: { kills: p.stats.k, deaths: p.stats.d },
       hp: p.hp, armor: p.armor, alive: p.alive, weapon: w, scoped: p.scoped && w.def.type === 'sniper', spreadPx,
       yaw: p.yaw, respawnIn: p.respawnT, killedBy: this.killedBy, protect: p.protectT, aimName, aimTeam,
+      bomb: this.bombHUD(),
+      c4Selected: !!p.c4Selected,
     });
-    this.hud.drawRadar(p, this.actors, this.time);
+    const followed = this.bomb && !p.alive ? this.getSpectatorActor() : null;
+    const radarMe = this.bomb && !p.alive ? (followed || { id: p.id, team: p.team, pos: cam.position, yaw: 0, alive: false }) : p;
+    const knownC4 = this.bomb && (p.team === this.bomb.attackTeam || this.bomb.bomb.state === 'planted');
+    this.hud.drawRadar(radarMe, this.actors, this.time, this.bomb ? { hideEnemies: !p.alive, c4: knownC4 ? { state: this.bomb.bomb.state, pos: this.bomb.bomb.position } : null } : {});
     const tab = p.keys.has('Tab') && this.playing && !this.paused;
     if (tab !== this.boardShown || (tab && this.frame % 20 === 0)) { this.boardShown = tab; this.hud.scoreboard(tab, this.actors, p.id, this.score); }
   }

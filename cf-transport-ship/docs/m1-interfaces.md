@@ -128,4 +128,4 @@ game.audio;                     // 既有音效对象，可调用 playUI('click'
 - `game.startBagId` 是一次性覆盖位：初始背包选择屏直接写 `profile.selectedBackpackId`，此字段当前无人写入，开局背包由档案的 `selectedBackpackId` 决定。
 - 对局内 `hud.show(null)` 显示对局 HUD；主页等非对局屏必须传 `{ hideHud: true }`。
 - 槽位在背包卡片内整行排布（桌面与竖屏一致），装备名一行显示、过长才省略号，避免窄卡把中文逐字折行。
-- 验收脚本：`npm test`（档案）与 `node tools/verify-m1.mjs`（浏览器，需要 8000 端口静态预览）。
+- 验收脚本：`npm test`（档案）与 `node tools/verify-game.mjs`（浏览器，需要 8000 端口静态预览）。

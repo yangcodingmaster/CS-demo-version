@@ -193,6 +193,12 @@ export class Effects {
   // 烟囱排烟 & 海鸥
   initAmbient(funnelTop) {
     this.funnelTop = funnelTop;
+    this.birdsVisible = !!funnelTop;
+    // 鸟群是共享特效池的一部分，切图时复用，不重复增加场景节点。
+    if (this.birds.length) {
+      for (const bird of this.birds) bird.g.visible = this.birdsVisible;
+      return;
+    }
     const birdMat = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.8, side: THREE.DoubleSide });
     const tipMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
@@ -207,9 +213,36 @@ export class Effects {
       const wrR = new THREE.Group(); wrR.add(wR, tR); const wrL = new THREE.Group(); wrL.add(wL, tL);
       b.add(body, wrR, wrL);
       b.scale.setScalar(1.1);
+      b.visible = this.birdsVisible;
       this.scene.add(b);
       this.birds.push({ g: b, wR: wrR, wL: wrL, r: 25 + Math.random() * 30, h: 18 + Math.random() * 16, sp: 0.18 + Math.random() * 0.12, ph: Math.random() * 6.28, cx: -10 + Math.random() * 30, flap: Math.random() * 6 });
     }
+  }
+  clear() {
+    this.add.p.length = 0;
+    this.smoke.p.length = 0;
+    this.add.geo.setDrawRange(0, 0);
+    this.smoke.geo.setDrawRange(0, 0);
+    this.tracers.length = 0;
+    this.tracerMesh.count = 0;
+    for (const decal of Object.values(this.decals)) {
+      decal.i = 0;
+      decal.mesh.count = 0;
+    }
+    for (const flash of this.flashes) {
+      flash.t = 0;
+      flash.s.visible = false;
+    }
+    for (const light of this.lights) {
+      light.t = 0;
+      light.l.intensity = 0;
+    }
+    this.shake = 0;
+    this.funnelT = 0;
+  }
+  setMap(map) {
+    this.clear();
+    this.initAmbient(map?.funnelTop || null);
   }
   update(dt, t, camera, shipSpeed) {
     this.add.update(dt); this.smoke.update(dt);
@@ -252,6 +285,7 @@ export class Effects {
       }
     }
     for (const b of this.birds) {
+      if (!b.g.visible) continue;
       b.ph += dt * b.sp;
       const x = b.cx + Math.cos(b.ph) * b.r, z = Math.sin(b.ph) * b.r * 0.6, y = b.h + Math.sin(b.ph * 2.3) * 3;
       b.g.position.set(x, y, z);

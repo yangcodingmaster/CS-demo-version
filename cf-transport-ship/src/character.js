@@ -2,6 +2,11 @@
 import * as THREE from 'three';
 import { buildGunMerged } from './guns.js';
 import { fbm } from './textures.js';
+import { WEAPONS } from './weapons.js';
+
+// 持枪姿势按 weapons.js 的类别判断；PISTOLS 只在数据还没写入时的兜底集合
+const PISTOLS = new Set(['deagle', 'usp', 'glock18']);
+const isPistol = (id) => (WEAPONS[id] ? WEAPONS[id].type === 'pistol' : PISTOLS.has(id));
 
 let ATLAS = null;
 function atlas() {
@@ -226,7 +231,11 @@ export class Soldier {
   }
   setWeapon(id) {
     if (this.gunId === id) return;
-    if (this.gun) this.B.chest.remove(this.gun);
+    if (this.gun) {
+      this.B.chest.remove(this.gun);
+      // buildGunMerged 按武器 ID 缓存几何与材质，其他士兵可能仍在使用。
+      // 换枪只移除本实例；共享缓存随整个游戏生命周期复用。
+    }
     this.gunId = id;
     this.gun = buildGunMerged(id);
     // 枪挂在胸骨上，保证瞄准方向稳定
@@ -302,7 +311,8 @@ export class Soldier {
     this.recoilK *= Math.exp(-dt * 12);
     // 枪相对胸骨
     if (this.gun) {
-      const sniper = this.gunType === 'awm', pistol = this.gunType === 'deagle', knife = this.gunType === 'knife' || this.gunType === 'he';
+      // 持枪类别按武器数据判断，新增手枪不用再改这里
+      const sniper = this.gunType === 'awm', pistol = isPistol(this.gunType), knife = this.gunType === 'knife' || this.gunType === 'he';
       const gx = pistol ? 0.03 : 0.1, gy = pistol ? 0.14 : 0.1, gz = pistol ? -0.42 : -0.3;
       this.gun.position.set(gx, gy + (st.reloading ? -0.08 : 0), gz + this.recoilK * 0.05);
       this.gun.rotation.set(st.reloading ? -0.5 : 0, 0.37, st.reloading ? 0.4 : 0);

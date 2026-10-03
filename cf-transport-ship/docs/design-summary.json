@@ -8,8 +8,8 @@
     "melee": 1,
     "throwable": 3
   },
-  "existingEquipment": 7,
-  "plannedEquipment": 4,
+  "existingEquipment": 9,
+  "plannedEquipment": 2,
   "participants": 10,
   "bots": 9,
   "activeRoundUpperSeconds": 130,

@@ -1,9 +1,12 @@
 {
   "schemaVersion": 1,
   "documentStatus": "implementation_specification_not_runtime_config",
-  "confirmedMapId": "desert_gray",
-  "confirmedMapName": "CF 沙漠灰",
-  "mapReferenceStatus": "awaiting_user_reference",
+  "confirmedMapId": "desert-gray",
+  "confirmedMapName": "沙城（沙漠灰风格原创布局）",
+  "mapReferenceStatus": "original_layout_authorized_2026_10_02",
+  "bombImplementationStatus": "playable_desert_town_and_test_arena",
+  "runtimeMapLayoutSource": "src/desert-layout.js:DESERT_LAYOUT",
+  "runtimeBombDefaultsSource": "src/bomb-rules.js:BOMB_DEFAULTS",
   "weaponStyle": "现有程序化简化 3D，精修比例、材质和动作",
   "backpackCount": 3,
   "slots": [
@@ -66,7 +69,7 @@
       "id": "usp",
       "name": "USP",
       "category": "secondary",
-      "availability": "planned",
+      "availability": "existing",
       "deliveryStage": "M1B",
       "visualDirection": "无消音器的黑灰标准手枪，细长套筒、独立扳机护圈与握把"
     },
@@ -74,7 +77,7 @@
       "id": "glock18",
       "name": "Glock-18",
       "category": "secondary",
-      "availability": "planned",
+      "availability": "existing",
       "deliveryStage": "M1B",
       "visualDirection": "短方套筒与深色聚合物握把，轮廓区别于 USP 和沙漠之鹰"
     },

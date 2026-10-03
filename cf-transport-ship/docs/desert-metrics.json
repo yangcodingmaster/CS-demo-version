@@ -1,0 +1,139 @@
+{
+  "source": "src/desert-map.js + World + NavGrid",
+  "mapId": "desert-gray",
+  "width": 76,
+  "depth": 64,
+  "checkedSpawnToSitePaths": 20,
+  "distances": [
+    {
+      "side": "attack",
+      "spawn": 0,
+      "site": "A",
+      "meters": 58.12
+    },
+    {
+      "side": "attack",
+      "spawn": 0,
+      "site": "B",
+      "meters": 58.23
+    },
+    {
+      "side": "attack",
+      "spawn": 1,
+      "site": "A",
+      "meters": 59.14
+    },
+    {
+      "side": "attack",
+      "spawn": 1,
+      "site": "B",
+      "meters": 59.11
+    },
+    {
+      "side": "attack",
+      "spawn": 2,
+      "site": "A",
+      "meters": 60.83
+    },
+    {
+      "side": "attack",
+      "spawn": 2,
+      "site": "B",
+      "meters": 62.76
+    },
+    {
+      "side": "attack",
+      "spawn": 3,
+      "site": "A",
+      "meters": 57.59
+    },
+    {
+      "side": "attack",
+      "spawn": 3,
+      "site": "B",
+      "meters": 59.63
+    },
+    {
+      "side": "attack",
+      "spawn": 4,
+      "site": "A",
+      "meters": 56.88
+    },
+    {
+      "side": "attack",
+      "spawn": 4,
+      "site": "B",
+      "meters": 59.64
+    },
+    {
+      "side": "defend",
+      "spawn": 0,
+      "site": "A",
+      "meters": 38.84
+    },
+    {
+      "side": "defend",
+      "spawn": 0,
+      "site": "B",
+      "meters": 24.51
+    },
+    {
+      "side": "defend",
+      "spawn": 1,
+      "site": "A",
+      "meters": 34.86
+    },
+    {
+      "side": "defend",
+      "spawn": 1,
+      "site": "B",
+      "meters": 27.93
+    },
+    {
+      "side": "defend",
+      "spawn": 2,
+      "site": "A",
+      "meters": 31.1
+    },
+    {
+      "side": "defend",
+      "spawn": 2,
+      "site": "B",
+      "meters": 31.56
+    },
+    {
+      "side": "defend",
+      "spawn": 3,
+      "site": "A",
+      "meters": 27.53
+    },
+    {
+      "side": "defend",
+      "spawn": 3,
+      "site": "B",
+      "meters": 35.34
+    },
+    {
+      "side": "defend",
+      "spawn": 4,
+      "site": "A",
+      "meters": 24.65
+    },
+    {
+      "side": "defend",
+      "spawn": 4,
+      "site": "B",
+      "meters": 39.26
+    }
+  ],
+  "rangeBySide": {
+    "attack": {
+      "min": 56.88,
+      "max": 62.76
+    },
+    "defend": {
+      "min": 24.51,
+      "max": 39.26
+    }
+  }
+}
