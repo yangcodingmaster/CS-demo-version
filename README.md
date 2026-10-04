@@ -4,6 +4,14 @@
 
 本仓库只维护 `cf-transport-ship/`。原仓库中的鹈鹕骑行与 QQ 飞车工程已移除，后续游戏改动都在 CF 目录内进行。
 
+## 在线游玩与发布
+
+游戏地址：<https://yangcodingmaster.github.io/CS-demo-version/>。
+
+GitHub Pages 使用 `.github/workflows/pages.yml` 自动发布。`main` 中的游戏代码或发布配置更新时，GitHub Actions 安装锁定依赖、运行测试、构建并发布 `cf-transport-ship/dist`；也可在 Actions 页面手动运行 `Publish game to GitHub Pages`。测试或构建失败时不执行新部署，保留此前线上版本。
+
+Pages 的发布源设为 **GitHub Actions**。无需提交 `dist/`，无需长期运行本地服务器，也无需额外部署密钥。游戏数据仍保存在各自浏览器中，当前为玩家与人机对战。
+
 ## 本地运行
 
 需要 Node.js、npm；以下静态预览命令还需要 Python 3。

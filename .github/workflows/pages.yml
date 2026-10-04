@@ -1,0 +1,58 @@
+name: Publish game to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cf-transport-ship/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cf-transport-ship
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cf-transport-ship/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Build game
+        run: npm run build
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: cf-transport-ship/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v5.0.1
