@@ -111,6 +111,7 @@ async function flow(browser) {
   const page = await pageReady(browser);
   await shot(page, '01-home');
   await page.locator('#home [data-act="bomb"]').click();
+  await page.locator('#home [data-act="lobbyStart"]').click();
   check('主页爆破入口进入正确设置', await page.locator('#setupTitle').textContent() === '爆破测试场' && await page.locator('#bombRules').isVisible());
   check('设置明确标注当前选择的通用回归测试场', (await page.locator('#setupDesc').textContent()).includes('通用 A/B 测试场'));
   await shot(page, '02-setup');
@@ -317,6 +318,7 @@ async function rounds(browser) {
   await page.evaluate(() => window.__game.quitToMenu());
   check('退出返回主页', (await state(page)).screen === 'home' && !(await state(page)).playing);
   await page.locator('#home [data-act="team"]').click();
+  await page.locator('#home [data-act="lobbyStart"]').click();
   await page.locator('#btnStart').click();
   await page.locator('#bagSelect [data-act="start"]').click();
   s = await state(page);

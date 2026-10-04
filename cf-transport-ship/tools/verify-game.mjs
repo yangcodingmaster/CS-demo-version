@@ -170,12 +170,15 @@ async function uiFlow(browser, errs) {
   const bombOff = await bomb.getAttribute('class');
   const bombAria = await bomb.getAttribute('aria-disabled');
   await bomb.click({ timeout: 5000 });
+  check('主页：选择爆破后留在作战大厅', (await snapshot(page)).screen === 'home');
+  await page.locator('#home [data-act="lobbyStart"]').click();
   await page.waitForTimeout(250);
   const bombSetup = await page.evaluate(() => ({ mode: window.__game.selectedMode, title: document.getElementById('setupTitle').textContent, menu: !document.getElementById('menu').classList.contains('hidden') }));
   check('主页：爆破入口进入沙城设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '沙城', JSON.stringify(bombSetup));
   await page.locator('#btnMenuBack').click();
 
   await tap('#home [data-act="team"]');
+  await tap('#home [data-act="lobbyStart"]');
   check('主页 → 团队模式设置', await page.locator('#menu').isVisible(), JSON.stringify({ visible: await page.locator('#menu').isVisible() }));
   await shoot(page, 'desktop-02-team-setup');
 

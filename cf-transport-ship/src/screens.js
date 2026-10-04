@@ -30,21 +30,52 @@ const USE_DESC = {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const HOME_HTML = `
-<div class="m1Box m1HomeBox">
-  <div class="m1Hero">
-    <div class="m1Logo">CROSSFIRE</div>
-    <h1 class="m1H1">运输船</h1>
-    <div class="m1En">TRANSPORT SHIP</div>
-    <div class="m1Who" data-role="who"></div>
-  </div>
-  <div class="m1Notice" data-role="notice"></div>
-  <div class="m1Menu">
-    <button class="m1Btn go" data-act="team"><b>团队竞技</b><small>运输船 · 选择初始背包后进入对局</small></button>
-    <button class="m1Btn" data-act="bomb"><b>爆破模式</b><small data-role="bombSummary"></small></button>
-    <button class="m1Btn" data-act="personal"><b>个人界面</b><small>昵称 · 三个背包 · 武器库</small></button>
-    <button class="m1Btn" data-act="settings"><b>设置</b><small>灵敏度 · FOV · 音量 · 画质</small></button>
-  </div>
-  <div class="m1Foot" data-role="homeFoot"></div>
+<div class="m1Box m1HomeBox lobbyShell">
+  <header class="lobbyHeader">
+    <div class="lobbyBrand"><span class="lobbyLogo">CROSSFIRE</span><h1>作战大厅</h1></div>
+    <div class="lobbyLocal"><span></span>本地档案</div>
+  </header>
+  <main class="lobbyBody">
+    <section class="lobbyStage" data-role="lobbyStage" aria-label="当前角色与配装展示">
+      <div class="lobbyStageLabel"><span>OPERATOR</span><small>准备就绪</small></div>
+      <div class="lobbyIdentity">
+        <div class="lobbyIdentityTop"><span class="lobbyCallsign">当前角色</span><strong data-role="who"></strong></div>
+        <div class="lobbyLoadout"><span data-role="lobbyBagName"></span><span class="lobbySeparator"></span><strong data-role="lobbyPrimary"></strong></div>
+        <div class="lobbyBagPicker" data-role="lobbyBagPicker" aria-label="选择大厅默认背包"></div>
+      </div>
+    </section>
+    <section class="lobbyModes" aria-labelledby="lobbyModeTitle">
+      <div class="lobbyModeHeading"><h2 id="lobbyModeTitle">选择模式</h2><span>人机对战</span></div>
+      <div class="lobbyModeList" role="group" aria-label="作战模式">
+        <button class="lobbyModeCard" data-act="team" aria-pressed="false">
+          <span class="lobbyMapArt lobbyMapShip" aria-hidden="true">
+            <svg viewBox="0 0 160 160" focusable="false"><path class="mapOutline" d="M17 137h129V63l-22-12V20H48v31L17 63z"/><path class="mapFloor" d="M20 115l54-36 68 37-54 35z"/><path class="mapCrate" d="M33 92l26-15 29 15-27 17zM33 92v25l28 17v-25M61 109l27-17v25l-27 17M95 62l22-12 24 12-23 14zM95 62v34l23 14V76M118 76l23-14v34l-23 14"/><path class="mapDetail" d="M75 23v52M98 24v33M21 68l20-12M57 90l17 10M115 56l17 7M38 103l14 8M104 78l7 5"/><path class="mapAccent" d="M47 141l29-18 19 11"/></svg>
+            <span>TRANSPORT SHIP</span>
+          </span>
+          <span class="lobbyModeCopy"><span class="lobbyModeMeta">团队模式<span class="lobbyModeStatus" aria-hidden="true"></span></span><b>团队竞技</b><small>运输船</small><span class="lobbyModeRule">击杀得分，阵亡后复活</span></span>
+        </button>
+        <button class="lobbyModeCard" data-act="bomb" aria-pressed="false">
+          <span class="lobbyMapArt lobbyMapDesert" aria-hidden="true">
+            <svg viewBox="0 0 160 160" focusable="false"><path class="mapFloor" d="M12 116l67-40 68 41-68 36z"/><path class="mapOutline" d="M30 124V49l47-26 54 27v70M77 23v55"/><path class="mapCrate" d="M32 79l26-14 22 12-23 14zM32 79v38l25 16V91M57 91l23-14v21M105 99V73l22-10 18 10v37M105 73l21 11 19-11M126 84v37"/><path class="mapDetail" d="M95 98V69q0-20 17-19 17 1 17 24v38M85 35v30M42 48v24M39 55l20-11M90 42l32 17M66 120l18-10 14 8"/><path class="mapAccent" d="M80 138l21-13 14 8M14 119l16-10"/></svg>
+            <span data-role="bombMapEnglish"></span>
+          </span>
+          <span class="lobbyModeCopy"><span class="lobbyModeMeta">回合模式<span class="lobbyModeStatus" aria-hidden="true"></span></span><b>爆破模式</b><small data-role="bombSummary"></small><span class="lobbyModeRule">攻守回合，安放或拆除 C4</span></span>
+        </button>
+      </div>
+      <div class="lobbyLaunch">
+        <div class="m1Notice" data-role="notice" role="status" aria-live="polite"></div>
+        <button class="lobbyStart" data-act="lobbyStart"><span>开始作战</span><span aria-hidden="true">↗</span></button>
+        <div class="lobbyLaunchNote" data-role="homeFoot"></div>
+      </div>
+    </section>
+  </main>
+  <nav class="lobbyFooter" aria-label="大厅功能">
+    <button data-act="lobbyBag"><span aria-hidden="true">▣</span>背包</button>
+    <button data-act="lobbyArmory"><span aria-hidden="true">⌁</span>武器库</button>
+    <button data-act="personal"><span aria-hidden="true">◉</span>个人资料</button>
+    <button data-act="settings"><span aria-hidden="true">⚙</span>设置</button>
+    <div class="lobbyFooterNote">配装保存于当前浏览器</div>
+  </nav>
 </div>`;
 
 const PERSONAL_HTML = `
@@ -114,6 +145,7 @@ export class Screens {
     this.armBagId = null;
     this.armSlot = null;
     this.armReturnCtx = 'manage';
+    this.manageReturn = 'personal';
     this.notice = null;
     this._noticeTimer = 0;
     this._visible = null;
@@ -200,9 +232,10 @@ export class Screens {
 
   _onClick(container, e) {
     const t = e.target && e.target.closest
-      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w]')
+      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w],[data-lobby-bag]')
       : null;
     if (!t || !container.contains(t)) return;
+    if (t.dataset.lobbyBag) { this._selectLobbyBag(t.dataset.lobbyBag); return; }
     if (t.dataset.act) return this._act(t.dataset.act);
     if (t.dataset.slot) return this._slotTap(t.dataset.bag, t.dataset.slot);
     if (t.dataset.bag) return this._bagTap(t.dataset.bag);
@@ -212,8 +245,11 @@ export class Screens {
   // ---------- 交互 ----------
   _act(act) {
     switch (act) {
-      case 'team': this._click(); this._call('showTeamSetup'); break;
-      case 'bomb': this._click(); this._call('showBombSetup'); break;
+      case 'team': this._click(); this._call('selectLobbyMode', 'team'); break;
+      case 'bomb': this._click(); this._call('selectLobbyMode', 'bomb'); break;
+      case 'lobbyStart': this._click('start'); this._call('openLobbySetup'); break;
+      case 'lobbyBag': this._click(); this._call('openLobbyBackpack'); break;
+      case 'lobbyArmory': this._click(); this._call('openLobbyArmory'); break;
       case 'personal': this._click(); this._call('showPersonal'); break;
       case 'settings': this._click(); this._call('showSettings'); break;
       case 'home': this._click(); this._call('showHome'); break;
@@ -233,9 +269,17 @@ export class Screens {
     if (v === 'armory') this.openBackpack({ context: this.armReturnCtx });
     else if (v === 'backpack') {
       if (this.bagCtx === 'match') this._call('closeBagPanel');
-      else this._call('showPersonal');
+      else this._call(this.manageReturn === 'home' ? 'showHome' : 'showPersonal');
     } else if (v === 'bagSelect') this._call('showSelectedSetup');
     else if (v === 'personal') this._call('showHome');
+  }
+
+  _selectLobbyBag(bagId) {
+    this._click();
+    const result = this._call('selectLobbyBackpack', bagId);
+    if (result && result.ok && result.saved === false) this._notify(`${this._bagName(bagId)} 已应用，但${NO_SAVE_TIP}`, 'warn', 'home');
+    else if (result && result.ok === false) this._notify(`无法选择${this._bagName(bagId)}`, 'bad', 'home');
+    this.refresh();
   }
 
   _slotTap(bagId, slot) {
@@ -328,20 +372,38 @@ export class Screens {
 
   // ---------- 渲染 ----------
   _renderHome() {
-    const el = this.screens.home && this.screens.home.querySelector('[data-role=who]');
-    if (!el) return;
+    const home = this.screens.home;
+    if (!home) return;
     const map = bombMapInfo(this.g.bombMapId);
-    this.screens.home.querySelector('[data-role=bombSummary]').textContent = `${map.name} · 5v5 回合对局`;
-    this.screens.home.querySelector('[data-role=homeFoot]').textContent = `运输船团队竞技，或前往${map.name}进行爆破对局。配置你的三个背包，再进入战场。`;
+    home.querySelector('[data-role=bombSummary]').textContent = `${map.name} · 5v5`;
+    home.querySelector('[data-role=bombMapEnglish]').textContent = map.english;
+    const mode = this.g.selectedMode === 'bomb' ? 'bomb' : 'team';
+    for (const button of home.querySelectorAll('.lobbyModeCard')) {
+      const selected = button.dataset.act === mode;
+      button.classList.toggle('selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
+    home.querySelector('[data-role=homeFoot]').textContent = `${mode === 'bomb' ? `爆破模式 · ${map.name}` : '团队竞技 · 运输船'} · 下一步选择阵营与难度`;
     const p = this.profile;
     const nick = (p && p.data && p.data.nickname) || DEFAULT_NICK;
     const bagId = p && p.data && p.data.selectedBackpackId;
     const bag = bagId ? this._backpackById(bagId) : null;
     const lo = bag ? this._loadout(bag) : null;
     const main = lo && lo.primary && lo.primary.got ? lo.primary.name : null;
-    const bits = [`昵称：${esc(nick)}`];
-    bits.push(bag ? `主页默认：${esc(this._bagName(bag.id))}${main ? '（' + esc(main) + '）' : ''}` : '主页默认：未设置');
-    el.innerHTML = bits.join(' · ');
+    home.querySelector('[data-role=who]').textContent = nick;
+    home.querySelector('[data-role=lobbyBagName]').textContent = bag ? this._bagName(bag.id) : '未设置背包';
+    home.querySelector('[data-role=lobbyPrimary]').textContent = main || '未装备主武器';
+    const picker = home.querySelector('[data-role=lobbyBagPicker]');
+    const bags = this._bags();
+    const existing = [...picker.querySelectorAll('[data-lobby-bag]')];
+    if (existing.length !== bags.length || existing.some((button, i) => button.dataset.lobbyBag !== bags[i].id)) {
+      picker.innerHTML = bags.map((item, i) => `<button data-lobby-bag="${esc(item.id)}"><span>${i + 1}</span></button>`).join('');
+    }
+    for (const button of picker.querySelectorAll('[data-lobby-bag]')) {
+      button.setAttribute('aria-label', `选择${this._bagName(button.dataset.lobbyBag)}`);
+      button.setAttribute('aria-pressed', String(button.dataset.lobbyBag === bagId));
+      button.disabled = !p;
+    }
   }
 
   _renderPersonal() {
@@ -388,7 +450,7 @@ export class Screens {
     if (box) box.innerHTML = bags.length ? this._bagCards({ ctx, clickable: !!p }) : '<div class="m1Hint">档案尚未就绪，暂时读不到背包。</div>';
     if (foot) {
       if (ctx === 'manage') {
-        foot.innerHTML = '<button class="m1Btn sec" data-act="back">返回个人界面</button>';
+        foot.innerHTML = `<button class="m1Btn sec" data-act="back">${this.manageReturn === 'home' ? '返回大厅' : '返回个人界面'}</button>`;
       } else if (ctx === 'select') {
         foot.innerHTML = '<button class="m1Btn go" data-act="start">进入对局</button><button class="m1Btn sec" data-act="back">返回设置</button>';
       } else {

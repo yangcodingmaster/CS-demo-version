@@ -2,6 +2,20 @@
 
 本文件是 M1（主页、背包、运输船）并行开发的共享契约，先于编码确定。验收标准见 [game-design.md](game-design.md) 的 M1 段。基线与现状以提交 `8a263e6` 为准。
 
+2026-10-04 的作战大厅迭代扩展了以下接口，历史 M1 契约中的直接点模式进设置已被大厅“选择模式 → 开始作战”替代，实际交付与验证见 `game-design.md` 最新记录。
+
+```js
+game.selectLobbyMode(mode);        // team / bomb，更新选项并保存 cf_lobby_mode
+game.openLobbySetup();             // 打开已选模式的设置
+game.selectLobbyBackpack(bagId);   // 非对局时选择默认背包，返回 { ok, saved }
+game.openLobbyBackpack();          // 直接管理背包，返回大厅
+game.openLobbyArmory();            // 编辑当前默认背包主武器，返回背包后再返回大厅
+```
+
+`screens.manageReturn` 表示非局内背包的返回目标，允许 `home` / `personal`。个人页进入管理使用 `personal`，大厅快捷入口使用 `home`；初始背包和局内背包继续使用既有上下文。
+
+`src/lobby.js` 负责独立人物准备室，公开 `Lobby(renderer, textures)`、`sync({team, weaponId, mode, environment})`、`update(dt, time)`、`render()` 和 `dispose()`。复用主渲染器，渲染后恢复场景、镜头与特效设置；仅释放自有材质、几何和骨骼贴图，保留共享图集、武器和环境纹理。
+
 ## 文件归属
 
 | 文件 | 归属 | 说明 |
