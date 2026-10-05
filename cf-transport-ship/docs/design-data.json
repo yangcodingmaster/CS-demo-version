@@ -58,6 +58,38 @@
       "visualDirection": "紧凑黑灰轮廓、短枪管与弯弹匣，聚合物与金属分层"
     },
     {
+      "id": "scar",
+      "name": "SCAR-L",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "主武器扩充",
+      "visualDirection": "沙色机匣、黑色导轨与折叠枪托，稳定点射"
+    },
+    {
+      "id": "qbz95",
+      "name": "QBZ-95",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "主武器扩充",
+      "visualDirection": "黑灰无托轮廓、提把和后置弹匣"
+    },
+    {
+      "id": "p90",
+      "name": "P90",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "主武器扩充",
+      "visualDirection": "紧凑宽枪身、顶部半透明弹匣与镂空握持区"
+    },
+    {
+      "id": "barrett",
+      "name": "巴雷特 M82A1",
+      "category": "primary",
+      "availability": "existing",
+      "deliveryStage": "主武器扩充",
+      "visualDirection": "重型长枪身、制退器、瞄准镜与收拢支架"
+    },
+    {
       "id": "deagle",
       "name": "沙漠之鹰",
       "category": "secondary",
@@ -156,5 +188,6 @@
     "smokeDurationSeconds": 12,
     "smokeFadeSeconds": 1,
     "affectsAllTeams": true
-  }
+  },
+  "runtimeWeaponDataSource": "src/weapons.js:WEAPONS"
 }

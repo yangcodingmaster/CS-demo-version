@@ -16,6 +16,8 @@ game.openLobbyArmory();            // 编辑当前默认背包主武器，返回
 
 `src/lobby.js` 负责独立人物准备室，公开 `Lobby(renderer, textures)`、`sync({team, weaponId, mode, environment})`、`update(dt, time)`、`render()` 和 `dispose()`。复用主渲染器，渲染后恢复场景、镜头与特效设置；仅释放自有材质、几何和骨骼贴图，保留共享图集、武器和环境纹理。
 
+2026-10-05 武器库增加浏览状态 `armPreview` 与 `armFilter`：卡片 `data-preview` 只更新详情，`data-w` 为明确装备按钮；`data-arm-bag` / `data-arm-slot` 切换编辑目标。确认装备仍通过原 `_equip()` 保存并返回背包，默认出战背包不随编辑目标变化。`setIcons()` 接收彩色模型缩略图，对局 HUD 继续使用独立的白色轮廓图标。
+
 ## 文件归属
 
 | 文件 | 归属 | 说明 |

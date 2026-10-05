@@ -79,7 +79,7 @@ export class Game {
     await nextFrame();
     const icons = this.makeIcons();
     this.hud.setIcons(icons);
-    this.screens.setIcons(icons);
+    this.screens.setIcons(this.makeIcons({ colored: true }));
     this.lobby = new Lobby(this.renderer, this.T);
     this.lampLights();
     this.renderer.camera.position.set(-20, 12, 30); this.renderer.camera.lookAt(0, 2, 0);
@@ -137,12 +137,19 @@ export class Game {
     this.hud.buildRadar(this.world, this.map);
     if (this.env) this.lampLights();
   }
-  makeIcons() {
+  makeIcons({ colored = false } = {}) {
     const r = this.renderer.renderer;
-    const W = 256, H = 96;
+    const W = colored ? 512 : 256, H = colored ? 192 : 96;
     const rt = new THREE.WebGLRenderTarget(W, H);
+    if (colored) rt.texture.colorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
-    scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    if (colored) {
+      scene.environment = this.env.envRT?.texture || null;
+      scene.environmentIntensity = 1.4;
+      scene.add(new THREE.HemisphereLight(0xe6f0ff, 0x76654d, 2.4));
+      const key = new THREE.DirectionalLight(0xfff4de, 4.0);
+      key.position.set(2, 3, -1); scene.add(key);
+    } else scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
     const out = {};
     const prevColor = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
@@ -156,14 +163,15 @@ export class Game {
       const hw = (box.max.z - box.min.z) / 2 * 1.08, hh = (box.max.y - box.min.y) / 2 * 1.08;
       const ext = Math.max(hw, hh * W / H);
       cam.left = -ext; cam.right = ext; cam.top = ext * H / W; cam.bottom = -ext * H / W;
-      cam.position.set(2, cy, cz); cam.lookAt(0, cy, cz); cam.updateProjectionMatrix();
+      cam.position.set(2, cy + (colored ? 0.24 : 0), cz + (colored ? 0.25 : 0)); cam.lookAt(0, cy, cz); cam.updateProjectionMatrix();
       r.setRenderTarget(rt); r.clear(); r.render(scene, cam);
       r.readRenderTargetPixels(rt, 0, 0, W, H, buf);
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const ctx = c.getContext('2d'); const img = ctx.createImageData(W, H);
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const s = ((H - 1 - y) * W + x) * 4, d = (y * W + x) * 4;
-        img.data[d] = img.data[d + 1] = img.data[d + 2] = 245; img.data[d + 3] = buf[s + 3] > 10 ? 235 : 0;
+        if (colored) for (let k = 0; k < 4; k++) img.data[d + k] = buf[s + k];
+        else { img.data[d] = img.data[d + 1] = img.data[d + 2] = 245; img.data[d + 3] = buf[s + 3] > 10 ? 235 : 0; }
       }
       ctx.putImageData(img, 0, 0);
       out[id] = c.toDataURL();
@@ -171,6 +179,7 @@ export class Game {
     }
     r.setRenderTarget(null); r.setClearColor(prevColor, prevAlpha);
     rt.dispose();
+    scene.overrideMaterial?.dispose();
     return out;
   }
 
@@ -220,8 +229,9 @@ export class Game {
     this.actors.push(this.player);
     const N = this.bomb ? this.bomb.config.teamSize : o.size;
     const prim = (team, i) => {
-      if (i === 1 && N >= 4) return 'awm';
-      if (i === 3 && N >= 6) return 'mp5';
+      if (i === 1 && N >= 4) return team === 'BL' ? 'awm' : 'barrett';
+      if (i === 3 && N >= 6) return team === 'BL' ? 'p90' : 'mp5';
+      if (i === 2) return team === 'BL' ? 'qbz95' : 'scar';
       if (i === 5) return team === 'BL' ? 'm4a1' : 'ak47';
       return team === 'BL' ? 'ak47' : 'm4a1';
     };
@@ -979,7 +989,7 @@ export class Game {
     this.vm.reload(d.reload, empty);
     this.timers.push({ t: t + d.reload * 0.2, fn: () => audio.playReload(id, 'magout') });
     this.timers.push({ t: t + d.reload * 0.6, fn: () => audio.playReload(id, 'magin') });
-    if (empty) this.timers.push({ t: t + d.reload * 0.82, fn: () => audio.playReload(id, id === 'awm' ? 'bolt' : 'boltback') });
+    if (empty) this.timers.push({ t: t + d.reload * 0.82, fn: () => audio.playReload(id, d.boltAction ? 'bolt' : 'boltback') });
     if (empty) this.timers.push({ t: t + d.reload * 0.88, fn: () => audio.playReload(id, 'boltforward') });
   }
   onReloadDone() { }

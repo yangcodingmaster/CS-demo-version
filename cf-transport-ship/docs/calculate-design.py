@@ -141,7 +141,7 @@ def render_sections(data, summary):
     calculations = [
         f"- 背包：{summary['backpackCount']} 个，每个 {summary['slotCountPerBackpack']} 槽。",
         f"- 最终装备：{summary['equipmentTotal']} 件，分类数量为{category_counts}。",
-        f"- 基线已存在 {summary['existingEquipment']} 件，计划新增 {summary['plannedEquipment']} 件。",
+        f"- 当前已实现 {summary['existingEquipment']} 件，计划新增 {summary['plannedEquipment']} 件。",
         f"- 爆破人数：{rules['teamSize']} × 2 = {summary['participants']}；机器人：{summary['participants']} − {rules['humanPlayers']} = {summary['bots']}。",
         f"- 单回合活跃时间保守上界：{rules['roundSeconds']} + {rules['bombSeconds']} = {summary['activeRoundUpperSeconds']} 秒。",
         f"- 整场保守上界：{rules['maxRounds']} × ({rules['preparationSeconds']} + {summary['activeRoundUpperSeconds']} + {rules['resultSeconds']}) = {summary['matchUpperSecondsExcludingPauseAndMenus']} 秒，即 {summary['matchUpperMinutes']} 分 {summary['matchUpperRemainingSeconds']} 秒。",

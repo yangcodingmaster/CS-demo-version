@@ -17,6 +17,7 @@ export const WEAPONS = {
     sound: 'm4a1', hudName: 'M4A1',
   },
   awm: {
+    boltAction: true,
     id: 'awm', name: 'AWM', slot: 0, type: 'sniper', auto: false,
     dmg: 118, headMul: 2.2, limbMul: 0.82, rpm: 41, mag: 5, reserve: 20, reload: 3.5, draw: 1.1,
     speed: 0.82, range: 400, falloff: 0.998, pen: 2.6, armorPen: 0.95, bolt: 1.35,
@@ -31,6 +32,167 @@ export const WEAPONS = {
     spread: { base: 0.004, move: 0.022, air: 0.12, crouch: 0.7, perShot: 0.0035, max: 0.04, recover: 9 },
     recoil: { up: 0.0058, upMax: 0.06, side: 0.004, sideStart: 5, recover: 8 },
     sound: 'mp5', hudName: 'MP5',
+  },
+  scar: {
+    "id": "scar",
+    "name": "SCAR-L",
+    "slot": 0,
+    "type": "rifle",
+    "auto": true,
+    "dmg": 34,
+    "headMul": 4,
+    "limbMul": 0.8,
+    "rpm": 560,
+    "mag": 30,
+    "reserve": 90,
+    "reload": 2.6,
+    "draw": 0.86,
+    "speed": 0.91,
+    "range": 230,
+    "falloff": 0.987,
+    "pen": 1.05,
+    "armorPen": 0.74,
+    "spread": {
+      "base": 0.0018,
+      "move": 0.046,
+      "air": 0.16,
+      "crouch": 0.6,
+      "perShot": 0.0048,
+      "max": 0.047,
+      "recover": 8.6
+    },
+    "recoil": {
+      "up": 0.008,
+      "upMax": 0.085,
+      "side": 0.005,
+      "sideStart": 5,
+      "recover": 7.5
+    },
+    "sound": "scar",
+    "hudName": "SCAR-L"
+  },
+  qbz95: {
+    "id": "qbz95",
+    "name": "QBZ-95",
+    "slot": 0,
+    "type": "rifle",
+    "auto": true,
+    "dmg": 30,
+    "headMul": 4,
+    "limbMul": 0.8,
+    "rpm": 660,
+    "mag": 30,
+    "reserve": 90,
+    "reload": 2.7,
+    "draw": 0.7,
+    "speed": 0.98,
+    "range": 210,
+    "falloff": 0.98,
+    "pen": 0.85,
+    "armorPen": 0.69,
+    "reloadStyle": "bullpup",
+    "spread": {
+      "base": 0.0026,
+      "move": 0.033,
+      "air": 0.14,
+      "crouch": 0.6,
+      "perShot": 0.0042,
+      "max": 0.045,
+      "recover": 10
+    },
+    "recoil": {
+      "up": 0.0075,
+      "upMax": 0.08,
+      "side": 0.0052,
+      "sideStart": 5,
+      "recover": 9
+    },
+    "sound": "qbz95",
+    "hudName": "QBZ-95"
+  },
+  p90: {
+    "id": "p90",
+    "name": "P90",
+    "slot": 0,
+    "type": "smg",
+    "auto": true,
+    "dmg": 22,
+    "headMul": 3.4,
+    "limbMul": 0.85,
+    "rpm": 900,
+    "mag": 50,
+    "reserve": 100,
+    "reload": 3.1,
+    "draw": 0.62,
+    "speed": 0.99,
+    "range": 110,
+    "falloff": 0.965,
+    "pen": 0.5,
+    "armorPen": 0.55,
+    "reloadStyle": "top",
+    "spread": {
+      "base": 0.0048,
+      "move": 0.025,
+      "air": 0.13,
+      "crouch": 0.7,
+      "perShot": 0.004,
+      "max": 0.05,
+      "recover": 8
+    },
+    "recoil": {
+      "up": 0.006,
+      "upMax": 0.064,
+      "side": 0.0044,
+      "sideStart": 5,
+      "recover": 8
+    },
+    "sound": "p90",
+    "hudName": "P90"
+  },
+  barrett: {
+    "id": "barrett",
+    "name": "巴雷特 M82A1",
+    "slot": 0,
+    "type": "sniper",
+    "auto": false,
+    "dmg": 145,
+    "headMul": 2,
+    "limbMul": 0.8,
+    "rpm": 32,
+    "mag": 10,
+    "reserve": 20,
+    "reload": 4.1,
+    "draw": 1.4,
+    "speed": 0.72,
+    "range": 420,
+    "falloff": 0.998,
+    "pen": 3.4,
+    "armorPen": 0.98,
+    "boltAction": false,
+    "shotRecovery": 1.8,
+    "spread": {
+      "base": 0.085,
+      "scoped": 0.0005,
+      "move": 0.12,
+      "air": 0.26,
+      "crouch": 0.85,
+      "perShot": 0,
+      "max": 0.24,
+      "recover": 2.5
+    },
+    "recoil": {
+      "up": 0.05,
+      "upMax": 0.05,
+      "side": 0.006,
+      "sideStart": 0,
+      "recover": 2.8
+    },
+    "zoom": [
+      30,
+      11
+    ],
+    "sound": "barrett",
+    "hudName": "BARRETT M82A1"
   },
   deagle: {
     id: 'deagle', name: '沙漠之鹰', slot: 1, type: 'pistol', auto: false,
@@ -68,7 +230,7 @@ export const WEAPONS = {
   },
 };
 
-export const PRIMARIES = ['ak47', 'm4a1', 'awm', 'mp5'];
+export const PRIMARIES = Object.keys(WEAPONS).filter((id) => WEAPONS[id].slot === 0);
 
 export class WeaponState {
   constructor(id) {

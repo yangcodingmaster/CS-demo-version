@@ -145,8 +145,9 @@ async function profile(browser) {
   }
   await tap(page, '#home [data-lobby-bag="bag-2"]');
   await tap(page, '#home [data-act="lobbyArmory"]');
-  check('大厅武器库进入当前背包的主武器槽', await page.locator('#armory').isVisible() && (await page.locator('#armory .m1Arm').count()) === 4);
-  await tap(page, '#armory .m1Arm[data-w="mp5"]');
+  check('大厅武器库进入当前背包的主武器槽', await page.locator('#armory').isVisible() && (await page.locator('#armory .m1Arm').count()) === 8);
+  await tap(page, '#armory .m1Arm[data-preview="mp5"]');
+  await page.locator('#armory [data-w="mp5"]').click();
   check('武器库装备后返回背包', (await snapshot(page)).screen === 'backpack');
   await tap(page, '#backpack [data-act="back"]');
   await home(page);

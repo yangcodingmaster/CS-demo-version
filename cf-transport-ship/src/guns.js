@@ -1,5 +1,6 @@
 // 枪械模型：程序化构建。局部坐标：枪口朝 -Z，上 +Y，右 +X，原点在握把上方
 import * as THREE from 'three';
+import { primaryBuilders } from './guns-primary.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fbm, normalFromHeight } from './textures.js';
@@ -46,6 +47,7 @@ export function gunMaterials() {
     tan: mk(0x8f7a55, 0.6, 0.15),
     rubber: mk(0x191b1c, 0.9, 0.0),
     brass: mk(0xc8a04a, 0.3, 1.0),
+    smoke: new THREE.MeshStandardMaterial({ color: 0x876d3e, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 0.55, depthWrite: false }),
     glass: new THREE.MeshStandardMaterial({ color: 0x0a1a24, roughness: 0.05, metalness: 0.9, emissive: 0x051018 }),
     blade: mk(0xb9c2c8, 0.29, 0.94),
     red: mk(0x8a1a14, 0.5, 0.2),
@@ -167,6 +169,7 @@ function bladeFacet(upper) {
 }
 
 const builders = {
+  ...primaryBuilders({ part, RB, RB1, BX, CZ, CX, profile, anchor, guard, curvedMag }),
   ak47(m) {
     const g = new THREE.Group();
     // 冲压机匣与拱形上盖；加强筋使用涂层而不是两条醒目的银色贴片。

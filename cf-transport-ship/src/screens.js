@@ -13,9 +13,13 @@ const SLOT_INDEX = { primary: 0, secondary: 1, melee: 2, throwable: 3 };
 const SLOT_CN = { primary: '主武器', secondary: '副武器', melee: '近战', throwable: '投掷物' };
 const DEFAULT_NICK = '我';
 const NO_SAVE_TIP = '无法保存到本地，本次会话配置仍然有效';
-// 未交付装备（M1B / M3 的副武器与战术投掷物）不进列表的保证：
+// 未交付的战术投掷物不进列表：
 // 列表只取 weaponsForSlot(slot)，再用 WEAPONS[id].slot 校验，WEAPONS 里不存在的 ID 一律跳过。
 const USE_DESC = {
+  scar: '精准点射 · 首发稳定，持续扫射与机动性有所取舍',
+  qbz95: '机动步枪 · 短连发恢复快，后置弹匣',
+  p90: '近距持续输出 · 大容量，远距离衰减明显',
+  barrett: '重型狙击 · 穿透强，移动、切枪和射击恢复较慢',
   ak47: '潜伏者经典步枪 · 单发伤害高，连射上跳明显',
   m4a1: '保卫者经典步枪 · 后坐温和，适合压枪连点',
   awm: '重型狙击枪 · 开镜一枪致命，拉栓间隔长',
@@ -118,14 +122,15 @@ const BAG_HTML = `
 </div>`;
 
 const ARMORY_HTML = `
-<div class="m1Box">
+<div class="m1Box armoryShell">
   <div class="m1Head">
     <button class="m1Back" data-act="back">返回背包</button>
     <div class="m1HeadTxt"><h2 class="m1H2">武器库</h2><div class="m1Sub" data-role="armSub"></div></div>
   </div>
   <div class="m1Notice" data-role="notice"></div>
-  <div class="m1ArmGrid" data-role="armCards"></div>
-  <div class="m1Foot">点击装备立即保存到该背包的该槽位，然后回到背包界面。</div>
+  <div class="armoryToolbar"><div><span class="m1Lab">编辑背包</span><div data-role="armBags" class="armoryTabs" role="group" aria-label="编辑哪个背包"></div></div><small>浏览不会更改配装<br>装备后保存并返回背包</small></div>
+  <div data-role="armSlots" class="armoryTabs armorySlots" role="group" aria-label="装备槽位"></div>
+  <div class="armoryWorkspace"><section class="armoryCatalog" aria-label="可选武器"><div data-role="armFilters" class="armoryTabs" role="group" aria-label="主武器类型"></div><div class="m1ArmGrid" data-role="armCards"></div></section><section data-role="armDetail" class="armoryDetail" aria-label="武器详情"></section></div>
 </div>`;
 
 const TEMPLATES = [
@@ -144,6 +149,8 @@ export class Screens {
     this.bagCtx = 'manage';        // 'manage' | 'select' | 'match'
     this.armBagId = null;
     this.armSlot = null;
+    this.armFilter = 'all';
+    this.armPreview = null;
     this.armReturnCtx = 'manage';
     this.manageReturn = 'personal';
     this.notice = null;
@@ -198,6 +205,8 @@ export class Screens {
     this.armBagId = typeof bagId === 'string' && bagId ? bagId : null;
     this.armSlot = SLOTS.includes(slot) ? slot : null;
     this.armReturnCtx = BAG_CONTEXTS.includes(this.bagCtx) ? this.bagCtx : 'manage';
+    this.armFilter = 'all';
+    this.armPreview = null;
     this.show('armory');
   }
 
@@ -232,9 +241,21 @@ export class Screens {
 
   _onClick(container, e) {
     const t = e.target && e.target.closest
-      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w],[data-lobby-bag]')
+      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w],[data-lobby-bag],[data-preview],[data-filter],[data-arm-bag],[data-arm-slot]')
       : null;
     if (!t || !container.contains(t)) return;
+    if (t.dataset.preview || t.dataset.filter || t.dataset.armBag || t.dataset.armSlot) {
+      this._click();
+      if (t.dataset.preview) this.armPreview = t.dataset.preview;
+      if (t.dataset.filter) { this.armFilter = t.dataset.filter; this.armPreview = null; }
+      if (t.dataset.armBag) this.armBagId = t.dataset.armBag;
+      if (t.dataset.armSlot) { this.armSlot = t.dataset.armSlot; this.armFilter = 'all'; this.armPreview = null; }
+      const key = ['preview', 'filter', 'armBag', 'armSlot'].find((key) => t.dataset[key]);
+      const value = t.dataset[key];
+      this.refresh();
+      [...container.querySelectorAll('button')].find((button) => button.dataset[key] === value)?.focus({ preventScroll: true });
+      return;
+    }
     if (t.dataset.lobbyBag) { this._selectLobbyBag(t.dataset.lobbyBag); return; }
     if (t.dataset.act) return this._act(t.dataset.act);
     if (t.dataset.slot) return this._slotTap(t.dataset.bag, t.dataset.slot);
@@ -349,7 +370,7 @@ export class Screens {
       // 提示打在即将返回的背包屏上（装备成功后会立即切屏）；写盘失败必须如实说明，不能报绿色成功
       const target = this.armReturnCtx === 'select' ? 'bagSelect' : 'backpack';
       if (res.saved === false) this._notify(`已装备到${name}，但${NO_SAVE_TIP}`, 'warn', target);
-      else this._notify(`已装备到${name}`, 'ok', target);
+      else this._notify(`${WEAPONS[weaponId].name} 已装备到${name} · ${SLOT_CN[slot]}`, 'ok', target);
       this.openBackpack({ context: this.armReturnCtx });
       return;
     }
@@ -474,32 +495,41 @@ export class Screens {
   _renderArmory() {
     const c = this.screens.armory;
     if (!c) return;
-    const p = this.profile;
-    const sub = c.querySelector('[data-role=armSub]');
     const grid = c.querySelector('[data-role=armCards]');
-    if (!grid) return;
+    const detail = c.querySelector('[data-role=armDetail]');
+    const bag = this._backpackById(this.armBagId);
     const slot = this.armSlot;
-    const bagId = this.armBagId;
-    if (sub) sub.textContent = slot ? `${bagId ? this._bagName(bagId) : '未选择背包'} · ${SLOT_CN[slot]}` : '未选择槽位';
-    if (!p || !slot) {
-      grid.innerHTML = '<div class="m1Hint">请先从背包里点一个槽位，再选择要装备的武器。</div>';
+    c.querySelector('[data-role=armSub]').textContent = bag && slot ? `${this._bagName(bag.id)} / ${SLOT_CN[slot]} · 选择武器查看详情` : '从背包选择装备槽位';
+    if (!this.profile || !bag || !slot) {
+      grid.innerHTML = '<div class="m1Hint">请返回背包选择一个槽位。</div>';
+      detail.innerHTML = '';
+      for (const role of ['armBags', 'armSlots', 'armFilters']) c.querySelector(`[data-role=${role}]`).innerHTML = '';
       return;
     }
-    const bag = bagId ? this._backpackById(bagId) : null;
-    const lo = bag ? this._loadout(bag) : {};
-    const cur = lo[slot] && lo[slot].got ? lo[slot].id : null;
-    const ids = this._slotWeapons(slot);
-    grid.innerHTML = ids.length ? ids.map((id) => {
-      const w = WEAPONS[id];
-      const wname = (w && w.name) || id;
-      const desc = USE_DESC[id] || '现有装备';
-      return `<div class="m1Arm${id === cur ? ' on' : ''}" data-w="${esc(id)}">
-        <span class="m1Thumb big"><img data-icon="${esc(id)}" alt=""></span>
-        <b class="m1ArmName">${esc(wname)}</b>
-        <small class="m1ArmDesc">${esc(desc)}</small>
-        ${id === cur ? '<span class="m1Tag on">已装备</span>' : ''}
-      </div>`;
-    }).join('') : '<div class="m1Hint">该槽位当前没有可装备的武器。</div>';
+    const tab = (attr, value, label, selected) => `<button ${attr}="${esc(value)}" aria-pressed="${selected}">${esc(label)}</button>`;
+    c.querySelector('[data-role=armBags]').innerHTML = this._bags().map((b) => tab('data-arm-bag', b.id, this._bagName(b.id), b.id === bag.id)).join('');
+    c.querySelector('[data-role=armSlots]').innerHTML = SLOTS.map((v) => tab('data-arm-slot', v, SLOT_CN[v], v === slot)).join('');
+    const types = { rifle: '步枪', smg: '冲锋枪', sniper: '狙击枪', pistol: '手枪', melee: '近战', grenade: '投掷物' };
+    const all = this._slotWeapons(slot);
+    const filters = { all: '全部', rifle: '步枪', smg: '冲锋枪', sniper: '狙击枪' };
+    c.querySelector('[data-role=armFilters]').innerHTML = slot === 'primary' ? Object.entries(filters).map(([value,label]) => tab('data-filter', value, `${label} ${all.filter((id) => value === 'all' || WEAPONS[id].type === value).length}`, this.armFilter === value)).join('') : '';
+    const ids = all.filter((id) => slot !== 'primary' || this.armFilter === 'all' || WEAPONS[id].type === this.armFilter);
+    const current = bag[slot];
+    if (!ids.includes(this.armPreview)) this.armPreview = ids.includes(current) ? current : ids[0];
+    grid.innerHTML = ids.map((id) => `<button class="m1Arm${id === this.armPreview ? ' selected' : ''}" data-preview="${esc(id)}" aria-pressed="${id === this.armPreview}">
+      <span class="m1Thumb big"><img data-icon="${esc(id)}" alt=""></span><b class="m1ArmName">${esc(WEAPONS[id].name)}</b><small class="m1ArmDesc">${types[WEAPONS[id].type]}</small>${id === current ? '<span class="m1Tag on">已装备</span>' : ''}</button>`).join('');
+    const w = WEAPONS[this.armPreview], equipped = WEAPONS[current];
+    if (!w) { detail.innerHTML = '<p>该分类暂无武器。</p>'; return; }
+    const gun = w.type !== 'grenade' && w.type !== 'melee';
+    const metrics = gun ? [['dmg','基础伤害',''],['rpm','射速','发/分'],['mag','弹匣容量','发'],['reload','换弹','秒']] : w.type === 'melee' ? [['dmgLight','轻击伤害',''],['dmgHeavy','重击伤害',''],['speed','移动倍率','×']] : [['dmg','中心伤害',''],['radius','作用半径','米'],['fuse','引信','秒']];
+    const format = (n) => Number(n.toFixed(2)).toString();
+    const stats = metrics.map(([key,label,unit]) => {
+      const value = w[key], other = equipped?.[key];
+      if (!Number.isFinite(value)) return '';
+      const delta = Number.isFinite(other) && w.id !== current ? Math.round((value - other) * 100) / 100 : 0;
+      return `<div><dt>${label}</dt><dd>${format(value)}<small>${unit}</small>${delta ? `<span class="armoryDelta">${delta > 0 ? '+' : '−'}${format(Math.abs(delta))}</span>` : ''}</dd></div>`;
+    }).join('');
+    detail.innerHTML = `<div class="armoryEyebrow">${types[w.type]} / ${SLOT_CN[slot]}</div><h3>${esc(w.name)}</h3><div class="armoryHero"><img data-icon="${esc(w.id)}" alt="${esc(w.name)} 模型预览"></div><p>${esc(USE_DESC[w.id] || '现有装备')}</p><div class="armoryCompare">${w.id === current ? '当前装备' : `对比当前：${esc(equipped?.name || '未装备')}`}</div><dl class="armoryStats">${stats}</dl>${gun ? `<div class="armoryHandling">切枪 ${format(w.draw)} 秒 · 移动倍率 ${format(w.speed)}×</div>` : ''}<small class="armoryStatNote">${gun ? '伤害为基础值，实战受距离、护甲与命中部位影响。差值不代表整体强弱。' : '实际效果受距离与命中位置影响。'}</small><button class="m1Btn go armoryEquip" data-w="${esc(w.id)}" ${w.id === current ? 'disabled' : ''}>${w.id === current ? `已装备于${esc(this._bagName(bag.id))}` : `装备到${esc(this._bagName(bag.id))}`}</button><small class="armoryTarget">${SLOT_CN[slot]} · 不改变默认出战背包</small>`;
   }
 
   _bagCards({ ctx, clickable }) {

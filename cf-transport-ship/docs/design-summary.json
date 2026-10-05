@@ -1,14 +1,14 @@
 {
   "backpackCount": 3,
   "slotCountPerBackpack": 4,
-  "equipmentTotal": 11,
+  "equipmentTotal": 15,
   "equipmentByCategory": {
-    "primary": 4,
+    "primary": 8,
     "secondary": 3,
     "melee": 1,
     "throwable": 3
   },
-  "existingEquipment": 9,
+  "existingEquipment": 13,
   "plannedEquipment": 2,
   "participants": 10,
   "bots": 9,
