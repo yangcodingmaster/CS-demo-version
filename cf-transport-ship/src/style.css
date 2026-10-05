@@ -316,6 +316,127 @@ body.lk #clinks{opacity:.22}
 .m1ArmDesc{display:block;margin-top:5px;font-size:11px;color:var(--hudDim);line-height:1.6;overflow-wrap:anywhere}
 .m1Arm .m1Tag{position:absolute;top:8px;right:8px}
 
+/* ---------- 作战大厅 ---------- */
+#home.screen.m1{padding:clamp(22px,3.3vw,48px);background:linear-gradient(90deg,rgba(4,8,12,.06) 0%,rgba(4,8,12,.02) 46%,rgba(4,8,12,.27) 70%,rgba(4,8,12,.54) 100%);font-family:var(--cn);font-style:normal;cursor:default}
+.lobbyShell.m1HomeBox{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:26px;max-width:1440px;min-height:calc(100dvh - clamp(44px,6.6vw,96px));padding:0}
+.lobbyHeader{display:flex;align-items:center;justify-content:space-between;gap:20px;min-width:0;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.12)}
+.lobbyBrand{display:flex;align-items:center;gap:22px}
+.lobbyLogo{font-family:var(--cn);font-size:15px;line-height:1;letter-spacing:2px;font-weight:800;color:#f3b83a}
+.lobbyBrand h1{margin:0;padding-left:22px;border-left:1px solid rgba(255,255,255,.24);font-size:22px;letter-spacing:2px;line-height:1.2;font-weight:600}
+.lobbyLocal{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1px;color:#99a3ad}
+.lobbyLocal>span{width:5px;height:5px;border-radius:50%;background:#a1bcb0;box-shadow:0 0 12px #b8dbcb44}
+.lobbyBody{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(0,1fr);gap:clamp(24px,3.2vw,48px);align-items:stretch;min-width:0;min-height:440px}
+.lobbyStage{position:relative;min-width:0;min-height:440px;pointer-events:none!important}
+.lobbyStageLabel{display:flex;align-items:center;gap:13px;color:#8f9da8;position:absolute;top:2px;left:0;pointer-events:none!important}
+.lobbyStageLabel>span{font-size:10px;letter-spacing:3px;font-weight:600}
+.lobbyStageLabel>small{font-size:11px;padding-left:13px;border-left:1px solid rgba(255,255,255,.17);color:#a3b5af}
+.lobbyIdentity{position:absolute;left:0;bottom:9px;min-width:220px;max-width:100%;padding:17px 24px 16px 0;background:linear-gradient(90deg,rgba(8,13,19,.82),rgba(8,13,19,.34) 70%,transparent);text-shadow:0 2px 8px rgba(0,0,0,.45)}
+.lobbyIdentityTop{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+.lobbyCallsign{font-size:10px;color:#a7b0b8;letter-spacing:2px}
+.lobbyIdentityTop strong{font-size:26px;font-weight:650;line-height:1.25;letter-spacing:1px;overflow-wrap:anywhere}
+.lobbyLoadout{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:9px;color:#b9c2cb;font-size:12px;line-height:1.5;letter-spacing:.5px}
+.lobbyLoadout strong{font-weight:550;color:#e5ebef}
+.lobbySeparator{height:10px;width:1px;background:#aeb9c644}
+.lobbyBagPicker{display:flex;align-items:center;gap:8px;margin-top:14px}
+.lobbyBagPicker>button{display:grid;place-items:center;width:38px;height:32px;border:1px solid rgba(255,255,255,.18);background:rgba(17,23,29,.7);color:#9ba6af;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.lobbyBagPicker>button:hover{border-color:#b6c2cb;color:#fff;background:#212a33}
+.lobbyBagPicker>button[aria-pressed=true]{border-color:#f4b431;background:rgba(244,180,49,.13);color:#fbd37a;box-shadow:inset 0 -2px 0 #f4b431}
+.lobbyModes{display:flex;flex-direction:column;justify-content:center;gap:20px;min-width:0;max-width:500px;width:100%;margin-left:auto;padding:0 0 10px}
+.lobbyModeHeading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lobbyModeHeading h2{margin:0;font-size:21px;line-height:1.25;letter-spacing:1px;font-weight:600}
+.lobbyModeHeading>span{color:#a4afb7;font-size:10px;letter-spacing:1px;border:1px solid rgba(255,255,255,.17);padding:5px 8px;background:rgba(12,18,24,.62)}
+.lobbyModeList{display:flex;flex-direction:column;gap:12px}
+.lobbyModeCard{display:grid;grid-template-columns:128px minmax(0,1fr);align-items:stretch;position:relative;width:100%;min-height:146px;min-width:0;padding:0;overflow:hidden;border:1px solid #4f5a653d;background:rgba(12,19,26,.94);color:#e9edf0;text-align:left;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s;font-family:var(--cn)}
+.lobbyModeCard:hover{background:rgba(24,32,40,.96);border-color:#74838e91}
+.lobbyModeCard.selected{border-color:#eeb43b;box-shadow:inset 0 0 0 1px #eeb43b22;background:rgba(21,27,33,.96)}
+.lobbyModeCopy{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:17px 20px 17px 17px}
+.lobbyModeMeta{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:10px;color:#8997a2;letter-spacing:1.5px;margin-bottom:7px}
+.lobbyModeStatus{display:grid;place-items:center;width:15px;height:15px;border:1px solid #606f7a75;border-radius:50%;flex:0 0 auto;color:#211905;font-size:10px}
+.lobbyModeCard.selected .lobbyModeStatus{background:#f1b83d;border-color:#f1b83d}
+.lobbyModeCard.selected .lobbyModeStatus::after{content:'✓';font-weight:800}
+.lobbyModeCopy>b{font-size:24px;font-weight:650;letter-spacing:1px;line-height:1.25}
+.lobbyModeCopy>small{font-size:12px;margin-top:5px;line-height:1.4;letter-spacing:.5px;color:#bac5cd}
+.lobbyModeRule{margin-top:12px;display:block;color:#8d9da9;font-size:11px;line-height:1.5}
+.lobbyMapArt{display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;min-width:0;background:radial-gradient(ellipse at 40% 25%,#263a46,#14212b 90%);border-right:1px solid #ffffff0a;color:#7895a6}
+.lobbyMapArt>svg{width:100%;height:124px;display:block;margin-top:0;stroke:currentColor;stroke-width:1.3;fill:none}
+.lobbyMapArt>span{display:block;font-size:8px;letter-spacing:.9px;text-align:center;margin-bottom:10px;color:#8ca5b4;font-weight:500;line-height:1.4;padding:0 6px}
+.lobbyMapArt .mapOutline{stroke:#8aabbc;stroke-opacity:.67;stroke-width:1.1;fill:#27435366}
+.lobbyMapArt .mapFloor{fill:#284c5b55;stroke:#6b90a1;stroke-width:.8}
+.lobbyMapArt .mapCrate{stroke:#88a8b6;fill:#354f5c66;stroke-linejoin:round}
+.lobbyMapArt .mapDetail{stroke:#5d7f90;stroke-width:.9;stroke-opacity:.8}
+.lobbyMapArt .mapAccent{stroke:#e4be63;stroke-width:2.5;stroke-linecap:square}
+.lobbyMapDesert{background:radial-gradient(ellipse at 40% 25%,#494335,#252621 90%);color:#bbaa82}
+.lobbyMapDesert>span{color:#beaf8f}
+.lobbyMapDesert .mapOutline{stroke:#cab896;fill:#70614155}
+.lobbyMapDesert .mapFloor{stroke:#b29b70;fill:#72603955}
+.lobbyMapDesert .mapCrate{stroke:#bfa781;fill:#66583988}
+.lobbyMapDesert .mapDetail{stroke:#9c875e}
+.lobbyLaunch{margin-top:0}
+.lobbyLaunch>.m1Notice{margin:0 0 10px;padding:8px 11px;font-size:11px}
+.lobbyStart{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:60px;padding:15px 23px;background:#edb637;border:1px solid #f5c353;color:#201905;cursor:pointer;font-size:20px;letter-spacing:3px;font-weight:650;transition:background .15s,box-shadow .15s}
+.lobbyStart>span+span{font-size:27px;line-height:1;letter-spacing:0;font-weight:400}
+.lobbyStart:hover{background:#ffcd54;box-shadow:0 8px 30px #e9af2a20}
+.lobbyLaunchNote{margin-top:9px;color:#82919d;font-size:10px;line-height:1.6;letter-spacing:.4px;text-align:center}
+.lobbyFooter{display:flex;align-items:center;gap:8px;min-width:0;padding-top:17px;border-top:1px solid #ffffff1a}
+.lobbyFooter>button{display:flex;align-items:center;gap:9px;flex:0 1 auto;min-height:38px;padding:7px 18px;color:#c4cdd4;font-size:13px;letter-spacing:1px;background:rgba(10,17,24,.56);border:1px solid transparent;cursor:pointer;transition:background .15s,border-color .15s}
+.lobbyFooter>button:first-child{padding-left:12px}
+.lobbyFooter>button>span{display:grid;place-items:center;font-size:16px;line-height:1;color:#8a99a6;min-width:18px}
+.lobbyFooter>button:hover{background:#26313b;border-color:#5d6b783d;color:#fff}
+.lobbyFooterNote{margin-left:auto;color:#70808d;font-size:10px;letter-spacing:.5px;line-height:1.5;text-align:right}
+#home button:focus-visible{outline:2px solid #ffda79;outline-offset:4px}
+
+@media (max-height:760px) and (min-width:901px){
+  #home.screen.m1{padding:24px 36px}
+  .lobbyShell.m1HomeBox{min-height:calc(100dvh - 48px);gap:18px}
+  .lobbyHeader{padding-bottom:14px}
+  .lobbyBody,.lobbyStage{min-height:420px}
+  .lobbyModes{gap:16px;padding-bottom:0}
+  .lobbyModeCard{min-height:132px;grid-template-columns:118px minmax(0,1fr)}
+  .lobbyModeCopy{padding-top:13px;padding-bottom:13px}
+  .lobbyModeRule{margin-top:9px}
+  .lobbyMapArt>svg{height:111px}
+  .lobbyStart{min-height:56px;font-size:19px}
+  .lobbyFooter{padding-top:13px}
+}
+@media (max-width:1000px){
+  .lobbyBody{grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:24px}
+  .lobbyModeCard{grid-template-columns:96px minmax(0,1fr)}
+  .lobbyModeCopy{padding-left:14px;padding-right:14px}
+  .lobbyModeCopy>b{font-size:21px}
+  .lobbyFooter>button{padding-left:12px;padding-right:12px}
+  .lobbyFooterNote{max-width:140px}
+}
+@media (max-width:720px){
+  #home.screen.m1{padding:20px}
+  .lobbyShell.m1HomeBox{min-height:calc(100dvh - 40px);gap:20px}
+  .lobbyHeader{padding-bottom:15px}
+  .lobbyBrand{gap:13px}
+  .lobbyBrand h1{padding-left:13px;font-size:18px;letter-spacing:1px}
+  .lobbyLogo{font-size:12px;letter-spacing:1px}
+  .lobbyLocal{font-size:9px;letter-spacing:0}
+  .lobbyBody{grid-template-columns:minmax(0,1fr);gap:20px}
+  .lobbyStage{min-height:310px}
+  .lobbyStageLabel{top:0}
+  .lobbyIdentity{bottom:0;padding:12px 16px 12px 0}
+  .lobbyIdentityTop strong{font-size:22px}
+  .lobbyModes{max-width:none;gap:14px;padding:0}
+  .lobbyModeList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .lobbyModeCard{grid-template-columns:minmax(0,1fr);min-height:0}
+  .lobbyMapArt{height:94px;border-right:0;border-bottom:1px solid #ffffff0a}
+  .lobbyMapArt>svg{width:120px;height:80px;margin:auto}
+  .lobbyMapArt>span{margin-bottom:6px;font-size:7px}
+  .lobbyModeCopy{padding:12px}
+  .lobbyModeCopy>b{font-size:19px}
+  .lobbyModeCopy>small{font-size:11px}
+  .lobbyModeMeta{font-size:9px;letter-spacing:.5px}
+  .lobbyModeRule{font-size:10px;margin-top:8px}
+  .lobbyStart{min-height:54px;font-size:18px}
+  .lobbyFooter{flex-wrap:wrap;gap:4px;padding-top:12px}
+  .lobbyFooter>button{flex:1 1 calc(25% - 4px);justify-content:center;padding:8px 3px;font-size:11px;letter-spacing:.3px;gap:5px}
+  .lobbyFooter>button:first-child{padding-left:3px}
+  .lobbyFooterNote{flex:1 1 100%;max-width:none;margin-top:6px;text-align:center;font-size:9px}
+}
+
 @media (max-width:760px){
   .row3{grid-template-columns:minmax(0,1fr)}
   .screen.m1{padding:12px 11px 22px}
@@ -328,3 +449,44 @@ body.lk #clinks{opacity:.22}
   .m1Tags{margin-left:0}
   .m1Thumb{width:42px;height:22px}
 }
+
+/* 武器库：固定工具栏、列表独立滚动、明确装备目标。 */
+#armory{background:radial-gradient(ellipse at 20% 5%,#26313af5,#10151bf9 65%);padding:24px 32px}
+.armoryShell{max-width:1160px;height:100%;display:flex;flex-direction:column}
+.armoryShell>.m1Head{flex-shrink:0}
+.armoryToolbar{display:flex;justify-content:space-between;align-items:center;margin:6px 0 12px;gap:20px;flex-shrink:0}
+.armoryToolbar small{color:var(--hudDim);font-size:12px;line-height:1.7;text-align:right}
+.armoryTabs{display:flex;flex-wrap:wrap;gap:8px}
+.armoryTabs button{border:1px solid #ffffff25;background:#ffffff06;padding:9px 16px;color:var(--hudDim);font:inherit;font-size:13px;cursor:pointer}
+.armoryTabs button[aria-pressed=true]{background:#eabb3020;border-color:var(--accent);color:#ffe1a0}
+.armoryTabs button:hover{background:#ffffff13;color:#fff}
+.armoryTabs button:focus-visible,.armoryShell button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.armorySlots{border-bottom:1px solid #ffffff20;padding-bottom:12px;margin-bottom:16px;flex-shrink:0}
+.armoryWorkspace{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:24px;align-items:start;flex:1;min-height:0;overflow:hidden}
+.armoryCatalog{display:flex;flex-direction:column;min-height:0;height:100%}
+.armoryCatalog>.armoryTabs{margin-bottom:16px;flex-shrink:0}
+.armoryCatalog .m1ArmGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;overflow-y:auto;min-height:0;align-content:start;padding-right:8px;padding-bottom:6px}
+.armoryCatalog .m1Arm{color:#eee;text-align:left;padding:14px;min-height:155px;font:inherit;background:#222b33;border-color:#ffffff16}
+.armoryCatalog .m1Arm:hover{background:#2d3943}
+.armoryCatalog .m1Arm.selected{border-color:#d9c381;background:#eabb3010;box-shadow:inset 3px 0 var(--accent)}
+.armoryCatalog .m1Thumb.big{height:88px;border:0;background:radial-gradient(ellipse,#ffffff0e,transparent)}
+.armoryCatalog .m1ArmName{font-size:15px;letter-spacing:0}
+.armoryDetail{position:static;max-height:100%;overflow:auto;border:1px solid #ffffff20;padding:18px;background:linear-gradient(145deg,#28303aee,#141a21f5)}
+.armoryEyebrow,.armoryTarget,.armoryStatNote{font-size:11px;color:var(--hudDim);line-height:1.7}
+.armoryDetail h3{font-size:22px;margin:6px 0 0;letter-spacing:.5px}
+.armoryHero{height:clamp(70px,12vh,115px);display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse,#ffffff0c,transparent)}
+.armoryHero img{width:100%;height:100%;object-fit:contain;image-rendering:auto}
+.armoryDetail p{min-height:0;margin:8px 0;font-size:12px;line-height:1.7;color:#ced4dc}
+.armoryCompare{font-size:12px;color:#d9c381;border-top:1px solid #ffffff18;padding-top:10px;margin-top:10px}
+.armoryStats{margin:10px 0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.armoryStats dt{font-size:11px;color:var(--hudDim);margin-bottom:4px}
+.armoryStats dd{margin:0;font-size:18px;font-variant-numeric:tabular-nums}
+.armoryStats dd small{font-size:10px;color:var(--hudDim);margin-left:4px}
+.armoryDelta{display:inline-block;margin-left:7px;font-size:11px;color:#d9c381}
+.armoryHandling{color:var(--hudDim);font-size:11px;margin:8px 0}
+.armoryStatNote{display:block;font-size:10px;min-height:0}
+.armoryEquip{width:100%;margin-top:12px;text-align:center;clip-path:none;padding:12px}
+.armoryEquip:disabled{opacity:.55;cursor:default}
+.armoryTarget{display:block;text-align:center;margin-top:6px;font-size:10px}
+@media(max-width:1000px){.armoryWorkspace{grid-template-columns:minmax(0,1fr) 310px;gap:16px}.armoryDetail{padding:16px}.armoryCatalog .m1Arm{padding:10px}}
+@media(max-width:700px){#armory{padding:14px 12px;overflow:auto}.armoryShell{height:auto}.armoryWorkspace{grid-template-columns:1fr;overflow:visible}.armoryCatalog{height:auto}.armoryCatalog .m1ArmGrid{overflow:visible}.armoryDetail{overflow:visible}.armoryToolbar small{display:none}.armoryCatalog .m1Thumb.big{height:70px}}

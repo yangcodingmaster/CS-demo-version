@@ -54,6 +54,7 @@ async function flow() {
   const page = await ready();
   await shot(page, 'home');
   await page.locator('#home [data-act="bomb"]').click();
+  await page.locator('#home [data-act="lobbyStart"]').click();
   check('默认爆破入口为沙城', await page.locator('#setupTitle').textContent() === '沙城');
   check('设置说明原创沙漠灰风格', (await page.locator('#setupDesc').textContent()).includes('沙漠灰风格的原创布局'));
   await shot(page, 'setup');

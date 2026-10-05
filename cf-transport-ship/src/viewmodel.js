@@ -6,6 +6,10 @@ import { buildGun, gunMaterials } from './guns.js';
 import { WEAPONS } from './weapons.js';
 
 const HIP = {
+  scar: { p: [0.125, -0.13, -0.94], r: [0.045, 0.145, 0.02] },
+  qbz95: { p: [0.12, -0.14, -0.83], r: [0.045, 0.145, 0.02] },
+  p90: { p: [0.12, -0.14, -0.87], r: [0.05, 0.15, 0.02] },
+  barrett: { p: [0.13, -0.16, -0.99], r: [0.04, 0.13, 0.02] },
   ak47: { p: [0.125, -0.135, -0.71], r: [0.045, 0.145, 0.02] },
   m4a1: { p: [0.125, -0.155, -0.7], r: [0.045, 0.145, 0.02] },
   awm: { p: [0.135, -0.125, -0.78], r: [0.04, 0.135, 0.02] },
@@ -17,6 +21,7 @@ const HIP = {
   he: { p: [0.125, -0.1, -0.36], r: [0.1, -0.2, 0.2] },
 };
 const KICK = {
+  scar: [0.038, 0.055], qbz95: [0.028, 0.045], p90: [0.023, 0.035], barrett: [0.13, 0.24],
   ak47: [0.04, 0.07], m4a1: [0.032, 0.05], awm: [0.09, 0.2], mp5: [0.024, 0.035],
   deagle: [0.05, 0.22], usp: [0.038, 0.16], glock18: [0.028, 0.12],
 };
@@ -162,7 +167,7 @@ export class ViewModel {
     this.flashFront.rotation.z = Math.random() * Math.PI;
     const sc = pick(FLASH_SCALE, this.id, 1);
     this.flash.scale.setScalar(sc * (0.8 + Math.random() * 0.45));
-    if (this.id !== 'awm') this.ejectShell();
+    if (!WEAPONS[this.id]?.boltAction) this.ejectShell();
     else this.anim = { type: 'bolt', t: 0, dur: 1.3 };
     // 滑套后坐：按能力判断（凡是有 slide 部件的枪都触发），不按 id 硬编码
     if (this.parts.slide) this.slideT = pick(SLIDE_KICK, this.id, 0.09);
@@ -237,6 +242,18 @@ export class ViewModel {
           if (f < 0.3) { P.mag.position.set(mp.x, mp.y - out * 0.12, mp.z + out * 0.02); P.mag.visible = true; }
           else if (f < 0.42) { P.mag.position.set(mp.x, mp.y - 0.12 - gone * 0.4, mp.z); P.mag.visible = gone < 0.95; }
           else { P.mag.visible = true; P.mag.position.set(mp.x, mp.y - (1 - back) * 0.2 - (1 - seat) * 0.015, mp.z + (1 - back) * 0.025); }
+          // 后置弹匣向下后方退出；P90 顶装弹匣向上提起再压入。
+          const style = WEAPONS[id]?.reloadStyle;
+          if (style === 'top') {
+            const lift = f < 0.3 ? out * 0.13 : f < 0.42 ? 0.13 + gone * 0.24 : (1 - back) * 0.23 + (1 - seat) * 0.012;
+            P.mag.position.set(mp.x - lift * 0.2, mp.y + lift, mp.z + lift * 0.15);
+            rz -= tilt * 0.3;
+          } else if (style === 'bullpup') {
+            const distance = mp.y - P.mag.position.y;
+            P.mag.position.x = mp.x - distance * 0.28;
+            P.mag.position.z = mp.z + distance * 0.35;
+            ry -= tilt * 0.12;
+          }
           const reach = ease(seg(f, 0.1, 0.17)) * (1 - ease(seg(f, 0.68, 0.78)));
           if (reach > 0) handLTarget = P.reloadGrip
             ? handTarget(P.reloadGrip, 0, 0, 0, reach)
@@ -247,7 +264,7 @@ export class ViewModel {
           const bf = seg(f, 0.74, 0.92), pull = Math.sin(bf * Math.PI);
           P.bolt.position.z = R.bolt.p.z + pull * 0.07;
           const target = handTarget(P.boltGrip || P.boltHandle || P.bolt, 0, 0, 0, pull);
-          if (id === 'awm') handRTarget = target;
+          if (WEAPONS[id]?.boltAction) handRTarget = target;
           else handLTarget = target;
           rz -= pull * 0.1;
         } else if (P.bolt && R.bolt) P.bolt.position.z = R.bolt.p.z;

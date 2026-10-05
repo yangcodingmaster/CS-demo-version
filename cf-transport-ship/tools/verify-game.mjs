@@ -170,12 +170,15 @@ async function uiFlow(browser, errs) {
   const bombOff = await bomb.getAttribute('class');
   const bombAria = await bomb.getAttribute('aria-disabled');
   await bomb.click({ timeout: 5000 });
+  check('主页：选择爆破后留在作战大厅', (await snapshot(page)).screen === 'home');
+  await page.locator('#home [data-act="lobbyStart"]').click();
   await page.waitForTimeout(250);
   const bombSetup = await page.evaluate(() => ({ mode: window.__game.selectedMode, title: document.getElementById('setupTitle').textContent, menu: !document.getElementById('menu').classList.contains('hidden') }));
   check('主页：爆破入口进入沙城设置', !/off/.test(bombOff || '') && bombAria !== 'true' && bombSetup.mode === 'bomb' && bombSetup.menu && bombSetup.title === '沙城', JSON.stringify(bombSetup));
   await page.locator('#btnMenuBack').click();
 
   await tap('#home [data-act="team"]');
+  await tap('#home [data-act="lobbyStart"]');
   check('主页 → 团队模式设置', await page.locator('#menu').isVisible(), JSON.stringify({ visible: await page.locator('#menu').isVisible() }));
   await shoot(page, 'desktop-02-team-setup');
 
@@ -235,12 +238,13 @@ async function uiFlow(browser, errs) {
   check('背包点槽位 → 武器库', (await snapshot(page)).screen === 'armory');
   await shoot(page, 'desktop-07-armory');
   const armCount = await page.locator('#armory .m1Arm').count();
-  const armIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.w));
-  check('武器库主武器只列 4 件已实现装备', armCount === 4 && armIds.every((id) => ['ak47', 'm4a1', 'awm', 'mp5'].includes(id)), JSON.stringify(armIds));
+  const armIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.preview));
+  check('武器库主武器只列 8 件已实现装备', armCount === 8 && armIds.every((id) => ['ak47', 'm4a1', 'awm', 'mp5', 'scar', 'qbz95', 'p90', 'barrett'].includes(id)), JSON.stringify(armIds));
   const plannedShown = await page.evaluate(() => ['flash', 'smoke'].filter((id) => document.querySelector(`#armory [data-w="${id}"]`)).length);
   check('武器库不出现未交付装备', plannedShown === 0, String(plannedShown));
 
-  await tap('#armory .m1Arm[data-w="mp5"]');
+  await tap('#armory .m1Arm[data-preview="mp5"]');
+  await page.locator('#armory [data-w="mp5"]').click();
   s = await snapshot(page);
   check('点选装备立即保存并返回背包', s.screen === 'backpack' && s.bags.includes('bag-2:mp5'), JSON.stringify({ screen: s.screen, bags: s.bags }));
 
@@ -417,9 +421,10 @@ async function weapons(browser, errs) {
   // 武器库：副武器应为 3 件，且新枪可装备
   await page.evaluate(() => { window.__game.screens.openArmory({ bagId: 'bag-1', slot: 'secondary' }); });
   await page.waitForTimeout(300);
-  const secIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.w));
+  const secIds = await page.locator('#armory .m1Arm').evaluateAll((els) => els.map((e) => e.dataset.preview));
   check('武器库：副武器列出 deagle / usp / glock18', secIds.length === 3 && ['deagle', 'usp', 'glock18'].every((id) => secIds.includes(id)), JSON.stringify(secIds));
-  await page.locator('#armory .m1Arm[data-w="usp"]').first().click();
+  await page.locator('#armory .m1Arm[data-preview="usp"]').first().click();
+  await page.locator('#armory [data-w="usp"]').click();
   await page.waitForTimeout(300);
   let s = await snapshot(page);
   check('新枪可装备并保存到背包', s.bags.includes('bag-1:deagle') === false && (await page.evaluate(() => window.__game.profile.data.backpacks[0].secondary)) === 'usp');
@@ -658,7 +663,8 @@ async function regressions(browser, errs) {
     window.__game.screens.openArmory({ bagId: 'bag-1', slot: 'primary' });
   });
   await page.waitForTimeout(300);
-  await page.locator('#armory .m1Arm[data-w="mp5"]').first().click();
+  await page.locator('#armory .m1Arm[data-preview="mp5"]').first().click();
+  await page.locator('#armory [data-w="mp5"]').click();
   await page.waitForTimeout(400);
   const notice = await page.evaluate(() => {
     const el = [...document.querySelectorAll('#backpack .m1Notice')].find((n) => n.textContent.trim());

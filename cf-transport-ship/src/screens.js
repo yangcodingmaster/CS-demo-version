@@ -13,9 +13,13 @@ const SLOT_INDEX = { primary: 0, secondary: 1, melee: 2, throwable: 3 };
 const SLOT_CN = { primary: '主武器', secondary: '副武器', melee: '近战', throwable: '投掷物' };
 const DEFAULT_NICK = '我';
 const NO_SAVE_TIP = '无法保存到本地，本次会话配置仍然有效';
-// 未交付装备（M1B / M3 的副武器与战术投掷物）不进列表的保证：
+// 未交付的战术投掷物不进列表：
 // 列表只取 weaponsForSlot(slot)，再用 WEAPONS[id].slot 校验，WEAPONS 里不存在的 ID 一律跳过。
 const USE_DESC = {
+  scar: '精准点射 · 首发稳定，持续扫射与机动性有所取舍',
+  qbz95: '机动步枪 · 短连发恢复快，后置弹匣',
+  p90: '近距持续输出 · 大容量，远距离衰减明显',
+  barrett: '重型狙击 · 穿透强，移动、切枪和射击恢复较慢',
   ak47: '潜伏者经典步枪 · 单发伤害高，连射上跳明显',
   m4a1: '保卫者经典步枪 · 后坐温和，适合压枪连点',
   awm: '重型狙击枪 · 开镜一枪致命，拉栓间隔长',
@@ -30,21 +34,52 @@ const USE_DESC = {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const HOME_HTML = `
-<div class="m1Box m1HomeBox">
-  <div class="m1Hero">
-    <div class="m1Logo">CROSSFIRE</div>
-    <h1 class="m1H1">运输船</h1>
-    <div class="m1En">TRANSPORT SHIP</div>
-    <div class="m1Who" data-role="who"></div>
-  </div>
-  <div class="m1Notice" data-role="notice"></div>
-  <div class="m1Menu">
-    <button class="m1Btn go" data-act="team"><b>团队竞技</b><small>运输船 · 选择初始背包后进入对局</small></button>
-    <button class="m1Btn" data-act="bomb"><b>爆破模式</b><small data-role="bombSummary"></small></button>
-    <button class="m1Btn" data-act="personal"><b>个人界面</b><small>昵称 · 三个背包 · 武器库</small></button>
-    <button class="m1Btn" data-act="settings"><b>设置</b><small>灵敏度 · FOV · 音量 · 画质</small></button>
-  </div>
-  <div class="m1Foot" data-role="homeFoot"></div>
+<div class="m1Box m1HomeBox lobbyShell">
+  <header class="lobbyHeader">
+    <div class="lobbyBrand"><span class="lobbyLogo">CROSSFIRE</span><h1>作战大厅</h1></div>
+    <div class="lobbyLocal"><span></span>本地档案</div>
+  </header>
+  <main class="lobbyBody">
+    <section class="lobbyStage" data-role="lobbyStage" aria-label="当前角色与配装展示">
+      <div class="lobbyStageLabel"><span>OPERATOR</span><small>准备就绪</small></div>
+      <div class="lobbyIdentity">
+        <div class="lobbyIdentityTop"><span class="lobbyCallsign">当前角色</span><strong data-role="who"></strong></div>
+        <div class="lobbyLoadout"><span data-role="lobbyBagName"></span><span class="lobbySeparator"></span><strong data-role="lobbyPrimary"></strong></div>
+        <div class="lobbyBagPicker" data-role="lobbyBagPicker" aria-label="选择大厅默认背包"></div>
+      </div>
+    </section>
+    <section class="lobbyModes" aria-labelledby="lobbyModeTitle">
+      <div class="lobbyModeHeading"><h2 id="lobbyModeTitle">选择模式</h2><span>人机对战</span></div>
+      <div class="lobbyModeList" role="group" aria-label="作战模式">
+        <button class="lobbyModeCard" data-act="team" aria-pressed="false">
+          <span class="lobbyMapArt lobbyMapShip" aria-hidden="true">
+            <svg viewBox="0 0 160 160" focusable="false"><path class="mapOutline" d="M17 137h129V63l-22-12V20H48v31L17 63z"/><path class="mapFloor" d="M20 115l54-36 68 37-54 35z"/><path class="mapCrate" d="M33 92l26-15 29 15-27 17zM33 92v25l28 17v-25M61 109l27-17v25l-27 17M95 62l22-12 24 12-23 14zM95 62v34l23 14V76M118 76l23-14v34l-23 14"/><path class="mapDetail" d="M75 23v52M98 24v33M21 68l20-12M57 90l17 10M115 56l17 7M38 103l14 8M104 78l7 5"/><path class="mapAccent" d="M47 141l29-18 19 11"/></svg>
+            <span>TRANSPORT SHIP</span>
+          </span>
+          <span class="lobbyModeCopy"><span class="lobbyModeMeta">团队模式<span class="lobbyModeStatus" aria-hidden="true"></span></span><b>团队竞技</b><small>运输船</small><span class="lobbyModeRule">击杀得分，阵亡后复活</span></span>
+        </button>
+        <button class="lobbyModeCard" data-act="bomb" aria-pressed="false">
+          <span class="lobbyMapArt lobbyMapDesert" aria-hidden="true">
+            <svg viewBox="0 0 160 160" focusable="false"><path class="mapFloor" d="M12 116l67-40 68 41-68 36z"/><path class="mapOutline" d="M30 124V49l47-26 54 27v70M77 23v55"/><path class="mapCrate" d="M32 79l26-14 22 12-23 14zM32 79v38l25 16V91M57 91l23-14v21M105 99V73l22-10 18 10v37M105 73l21 11 19-11M126 84v37"/><path class="mapDetail" d="M95 98V69q0-20 17-19 17 1 17 24v38M85 35v30M42 48v24M39 55l20-11M90 42l32 17M66 120l18-10 14 8"/><path class="mapAccent" d="M80 138l21-13 14 8M14 119l16-10"/></svg>
+            <span data-role="bombMapEnglish"></span>
+          </span>
+          <span class="lobbyModeCopy"><span class="lobbyModeMeta">回合模式<span class="lobbyModeStatus" aria-hidden="true"></span></span><b>爆破模式</b><small data-role="bombSummary"></small><span class="lobbyModeRule">攻守回合，安放或拆除 C4</span></span>
+        </button>
+      </div>
+      <div class="lobbyLaunch">
+        <div class="m1Notice" data-role="notice" role="status" aria-live="polite"></div>
+        <button class="lobbyStart" data-act="lobbyStart"><span>开始作战</span><span aria-hidden="true">↗</span></button>
+        <div class="lobbyLaunchNote" data-role="homeFoot"></div>
+      </div>
+    </section>
+  </main>
+  <nav class="lobbyFooter" aria-label="大厅功能">
+    <button data-act="lobbyBag"><span aria-hidden="true">▣</span>背包</button>
+    <button data-act="lobbyArmory"><span aria-hidden="true">⌁</span>武器库</button>
+    <button data-act="personal"><span aria-hidden="true">◉</span>个人资料</button>
+    <button data-act="settings"><span aria-hidden="true">⚙</span>设置</button>
+    <div class="lobbyFooterNote">配装保存于当前浏览器</div>
+  </nav>
 </div>`;
 
 const PERSONAL_HTML = `
@@ -87,14 +122,15 @@ const BAG_HTML = `
 </div>`;
 
 const ARMORY_HTML = `
-<div class="m1Box">
+<div class="m1Box armoryShell">
   <div class="m1Head">
     <button class="m1Back" data-act="back">返回背包</button>
     <div class="m1HeadTxt"><h2 class="m1H2">武器库</h2><div class="m1Sub" data-role="armSub"></div></div>
   </div>
   <div class="m1Notice" data-role="notice"></div>
-  <div class="m1ArmGrid" data-role="armCards"></div>
-  <div class="m1Foot">点击装备立即保存到该背包的该槽位，然后回到背包界面。</div>
+  <div class="armoryToolbar"><div><span class="m1Lab">编辑背包</span><div data-role="armBags" class="armoryTabs" role="group" aria-label="编辑哪个背包"></div></div><small>浏览不会更改配装<br>装备后保存并返回背包</small></div>
+  <div data-role="armSlots" class="armoryTabs armorySlots" role="group" aria-label="装备槽位"></div>
+  <div class="armoryWorkspace"><section class="armoryCatalog" aria-label="可选武器"><div data-role="armFilters" class="armoryTabs" role="group" aria-label="主武器类型"></div><div class="m1ArmGrid" data-role="armCards"></div></section><section data-role="armDetail" class="armoryDetail" aria-label="武器详情"></section></div>
 </div>`;
 
 const TEMPLATES = [
@@ -113,7 +149,10 @@ export class Screens {
     this.bagCtx = 'manage';        // 'manage' | 'select' | 'match'
     this.armBagId = null;
     this.armSlot = null;
+    this.armFilter = 'all';
+    this.armPreview = null;
     this.armReturnCtx = 'manage';
+    this.manageReturn = 'personal';
     this.notice = null;
     this._noticeTimer = 0;
     this._visible = null;
@@ -166,6 +205,8 @@ export class Screens {
     this.armBagId = typeof bagId === 'string' && bagId ? bagId : null;
     this.armSlot = SLOTS.includes(slot) ? slot : null;
     this.armReturnCtx = BAG_CONTEXTS.includes(this.bagCtx) ? this.bagCtx : 'manage';
+    this.armFilter = 'all';
+    this.armPreview = null;
     this.show('armory');
   }
 
@@ -200,9 +241,22 @@ export class Screens {
 
   _onClick(container, e) {
     const t = e.target && e.target.closest
-      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w]')
+      ? e.target.closest('[data-act],[data-slot],[data-bag],[data-w],[data-lobby-bag],[data-preview],[data-filter],[data-arm-bag],[data-arm-slot]')
       : null;
     if (!t || !container.contains(t)) return;
+    if (t.dataset.preview || t.dataset.filter || t.dataset.armBag || t.dataset.armSlot) {
+      this._click();
+      if (t.dataset.preview) this.armPreview = t.dataset.preview;
+      if (t.dataset.filter) { this.armFilter = t.dataset.filter; this.armPreview = null; }
+      if (t.dataset.armBag) this.armBagId = t.dataset.armBag;
+      if (t.dataset.armSlot) { this.armSlot = t.dataset.armSlot; this.armFilter = 'all'; this.armPreview = null; }
+      const key = ['preview', 'filter', 'armBag', 'armSlot'].find((key) => t.dataset[key]);
+      const value = t.dataset[key];
+      this.refresh();
+      [...container.querySelectorAll('button')].find((button) => button.dataset[key] === value)?.focus({ preventScroll: true });
+      return;
+    }
+    if (t.dataset.lobbyBag) { this._selectLobbyBag(t.dataset.lobbyBag); return; }
     if (t.dataset.act) return this._act(t.dataset.act);
     if (t.dataset.slot) return this._slotTap(t.dataset.bag, t.dataset.slot);
     if (t.dataset.bag) return this._bagTap(t.dataset.bag);
@@ -212,8 +266,11 @@ export class Screens {
   // ---------- 交互 ----------
   _act(act) {
     switch (act) {
-      case 'team': this._click(); this._call('showTeamSetup'); break;
-      case 'bomb': this._click(); this._call('showBombSetup'); break;
+      case 'team': this._click(); this._call('selectLobbyMode', 'team'); break;
+      case 'bomb': this._click(); this._call('selectLobbyMode', 'bomb'); break;
+      case 'lobbyStart': this._click('start'); this._call('openLobbySetup'); break;
+      case 'lobbyBag': this._click(); this._call('openLobbyBackpack'); break;
+      case 'lobbyArmory': this._click(); this._call('openLobbyArmory'); break;
       case 'personal': this._click(); this._call('showPersonal'); break;
       case 'settings': this._click(); this._call('showSettings'); break;
       case 'home': this._click(); this._call('showHome'); break;
@@ -233,9 +290,17 @@ export class Screens {
     if (v === 'armory') this.openBackpack({ context: this.armReturnCtx });
     else if (v === 'backpack') {
       if (this.bagCtx === 'match') this._call('closeBagPanel');
-      else this._call('showPersonal');
+      else this._call(this.manageReturn === 'home' ? 'showHome' : 'showPersonal');
     } else if (v === 'bagSelect') this._call('showSelectedSetup');
     else if (v === 'personal') this._call('showHome');
+  }
+
+  _selectLobbyBag(bagId) {
+    this._click();
+    const result = this._call('selectLobbyBackpack', bagId);
+    if (result && result.ok && result.saved === false) this._notify(`${this._bagName(bagId)} 已应用，但${NO_SAVE_TIP}`, 'warn', 'home');
+    else if (result && result.ok === false) this._notify(`无法选择${this._bagName(bagId)}`, 'bad', 'home');
+    this.refresh();
   }
 
   _slotTap(bagId, slot) {
@@ -305,7 +370,7 @@ export class Screens {
       // 提示打在即将返回的背包屏上（装备成功后会立即切屏）；写盘失败必须如实说明，不能报绿色成功
       const target = this.armReturnCtx === 'select' ? 'bagSelect' : 'backpack';
       if (res.saved === false) this._notify(`已装备到${name}，但${NO_SAVE_TIP}`, 'warn', target);
-      else this._notify(`已装备到${name}`, 'ok', target);
+      else this._notify(`${WEAPONS[weaponId].name} 已装备到${name} · ${SLOT_CN[slot]}`, 'ok', target);
       this.openBackpack({ context: this.armReturnCtx });
       return;
     }
@@ -328,20 +393,38 @@ export class Screens {
 
   // ---------- 渲染 ----------
   _renderHome() {
-    const el = this.screens.home && this.screens.home.querySelector('[data-role=who]');
-    if (!el) return;
+    const home = this.screens.home;
+    if (!home) return;
     const map = bombMapInfo(this.g.bombMapId);
-    this.screens.home.querySelector('[data-role=bombSummary]').textContent = `${map.name} · 5v5 回合对局`;
-    this.screens.home.querySelector('[data-role=homeFoot]').textContent = `运输船团队竞技，或前往${map.name}进行爆破对局。配置你的三个背包，再进入战场。`;
+    home.querySelector('[data-role=bombSummary]').textContent = `${map.name} · 5v5`;
+    home.querySelector('[data-role=bombMapEnglish]').textContent = map.english;
+    const mode = this.g.selectedMode === 'bomb' ? 'bomb' : 'team';
+    for (const button of home.querySelectorAll('.lobbyModeCard')) {
+      const selected = button.dataset.act === mode;
+      button.classList.toggle('selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
+    home.querySelector('[data-role=homeFoot]').textContent = `${mode === 'bomb' ? `爆破模式 · ${map.name}` : '团队竞技 · 运输船'} · 下一步选择阵营与难度`;
     const p = this.profile;
     const nick = (p && p.data && p.data.nickname) || DEFAULT_NICK;
     const bagId = p && p.data && p.data.selectedBackpackId;
     const bag = bagId ? this._backpackById(bagId) : null;
     const lo = bag ? this._loadout(bag) : null;
     const main = lo && lo.primary && lo.primary.got ? lo.primary.name : null;
-    const bits = [`昵称：${esc(nick)}`];
-    bits.push(bag ? `主页默认：${esc(this._bagName(bag.id))}${main ? '（' + esc(main) + '）' : ''}` : '主页默认：未设置');
-    el.innerHTML = bits.join(' · ');
+    home.querySelector('[data-role=who]').textContent = nick;
+    home.querySelector('[data-role=lobbyBagName]').textContent = bag ? this._bagName(bag.id) : '未设置背包';
+    home.querySelector('[data-role=lobbyPrimary]').textContent = main || '未装备主武器';
+    const picker = home.querySelector('[data-role=lobbyBagPicker]');
+    const bags = this._bags();
+    const existing = [...picker.querySelectorAll('[data-lobby-bag]')];
+    if (existing.length !== bags.length || existing.some((button, i) => button.dataset.lobbyBag !== bags[i].id)) {
+      picker.innerHTML = bags.map((item, i) => `<button data-lobby-bag="${esc(item.id)}"><span>${i + 1}</span></button>`).join('');
+    }
+    for (const button of picker.querySelectorAll('[data-lobby-bag]')) {
+      button.setAttribute('aria-label', `选择${this._bagName(button.dataset.lobbyBag)}`);
+      button.setAttribute('aria-pressed', String(button.dataset.lobbyBag === bagId));
+      button.disabled = !p;
+    }
   }
 
   _renderPersonal() {
@@ -388,7 +471,7 @@ export class Screens {
     if (box) box.innerHTML = bags.length ? this._bagCards({ ctx, clickable: !!p }) : '<div class="m1Hint">档案尚未就绪，暂时读不到背包。</div>';
     if (foot) {
       if (ctx === 'manage') {
-        foot.innerHTML = '<button class="m1Btn sec" data-act="back">返回个人界面</button>';
+        foot.innerHTML = `<button class="m1Btn sec" data-act="back">${this.manageReturn === 'home' ? '返回大厅' : '返回个人界面'}</button>`;
       } else if (ctx === 'select') {
         foot.innerHTML = '<button class="m1Btn go" data-act="start">进入对局</button><button class="m1Btn sec" data-act="back">返回设置</button>';
       } else {
@@ -412,32 +495,41 @@ export class Screens {
   _renderArmory() {
     const c = this.screens.armory;
     if (!c) return;
-    const p = this.profile;
-    const sub = c.querySelector('[data-role=armSub]');
     const grid = c.querySelector('[data-role=armCards]');
-    if (!grid) return;
+    const detail = c.querySelector('[data-role=armDetail]');
+    const bag = this._backpackById(this.armBagId);
     const slot = this.armSlot;
-    const bagId = this.armBagId;
-    if (sub) sub.textContent = slot ? `${bagId ? this._bagName(bagId) : '未选择背包'} · ${SLOT_CN[slot]}` : '未选择槽位';
-    if (!p || !slot) {
-      grid.innerHTML = '<div class="m1Hint">请先从背包里点一个槽位，再选择要装备的武器。</div>';
+    c.querySelector('[data-role=armSub]').textContent = bag && slot ? `${this._bagName(bag.id)} / ${SLOT_CN[slot]} · 选择武器查看详情` : '从背包选择装备槽位';
+    if (!this.profile || !bag || !slot) {
+      grid.innerHTML = '<div class="m1Hint">请返回背包选择一个槽位。</div>';
+      detail.innerHTML = '';
+      for (const role of ['armBags', 'armSlots', 'armFilters']) c.querySelector(`[data-role=${role}]`).innerHTML = '';
       return;
     }
-    const bag = bagId ? this._backpackById(bagId) : null;
-    const lo = bag ? this._loadout(bag) : {};
-    const cur = lo[slot] && lo[slot].got ? lo[slot].id : null;
-    const ids = this._slotWeapons(slot);
-    grid.innerHTML = ids.length ? ids.map((id) => {
-      const w = WEAPONS[id];
-      const wname = (w && w.name) || id;
-      const desc = USE_DESC[id] || '现有装备';
-      return `<div class="m1Arm${id === cur ? ' on' : ''}" data-w="${esc(id)}">
-        <span class="m1Thumb big"><img data-icon="${esc(id)}" alt=""></span>
-        <b class="m1ArmName">${esc(wname)}</b>
-        <small class="m1ArmDesc">${esc(desc)}</small>
-        ${id === cur ? '<span class="m1Tag on">已装备</span>' : ''}
-      </div>`;
-    }).join('') : '<div class="m1Hint">该槽位当前没有可装备的武器。</div>';
+    const tab = (attr, value, label, selected) => `<button ${attr}="${esc(value)}" aria-pressed="${selected}">${esc(label)}</button>`;
+    c.querySelector('[data-role=armBags]').innerHTML = this._bags().map((b) => tab('data-arm-bag', b.id, this._bagName(b.id), b.id === bag.id)).join('');
+    c.querySelector('[data-role=armSlots]').innerHTML = SLOTS.map((v) => tab('data-arm-slot', v, SLOT_CN[v], v === slot)).join('');
+    const types = { rifle: '步枪', smg: '冲锋枪', sniper: '狙击枪', pistol: '手枪', melee: '近战', grenade: '投掷物' };
+    const all = this._slotWeapons(slot);
+    const filters = { all: '全部', rifle: '步枪', smg: '冲锋枪', sniper: '狙击枪' };
+    c.querySelector('[data-role=armFilters]').innerHTML = slot === 'primary' ? Object.entries(filters).map(([value,label]) => tab('data-filter', value, `${label} ${all.filter((id) => value === 'all' || WEAPONS[id].type === value).length}`, this.armFilter === value)).join('') : '';
+    const ids = all.filter((id) => slot !== 'primary' || this.armFilter === 'all' || WEAPONS[id].type === this.armFilter);
+    const current = bag[slot];
+    if (!ids.includes(this.armPreview)) this.armPreview = ids.includes(current) ? current : ids[0];
+    grid.innerHTML = ids.map((id) => `<button class="m1Arm${id === this.armPreview ? ' selected' : ''}" data-preview="${esc(id)}" aria-pressed="${id === this.armPreview}">
+      <span class="m1Thumb big"><img data-icon="${esc(id)}" alt=""></span><b class="m1ArmName">${esc(WEAPONS[id].name)}</b><small class="m1ArmDesc">${types[WEAPONS[id].type]}</small>${id === current ? '<span class="m1Tag on">已装备</span>' : ''}</button>`).join('');
+    const w = WEAPONS[this.armPreview], equipped = WEAPONS[current];
+    if (!w) { detail.innerHTML = '<p>该分类暂无武器。</p>'; return; }
+    const gun = w.type !== 'grenade' && w.type !== 'melee';
+    const metrics = gun ? [['dmg','基础伤害',''],['rpm','射速','发/分'],['mag','弹匣容量','发'],['reload','换弹','秒']] : w.type === 'melee' ? [['dmgLight','轻击伤害',''],['dmgHeavy','重击伤害',''],['speed','移动倍率','×']] : [['dmg','中心伤害',''],['radius','作用半径','米'],['fuse','引信','秒']];
+    const format = (n) => Number(n.toFixed(2)).toString();
+    const stats = metrics.map(([key,label,unit]) => {
+      const value = w[key], other = equipped?.[key];
+      if (!Number.isFinite(value)) return '';
+      const delta = Number.isFinite(other) && w.id !== current ? Math.round((value - other) * 100) / 100 : 0;
+      return `<div><dt>${label}</dt><dd>${format(value)}<small>${unit}</small>${delta ? `<span class="armoryDelta">${delta > 0 ? '+' : '−'}${format(Math.abs(delta))}</span>` : ''}</dd></div>`;
+    }).join('');
+    detail.innerHTML = `<div class="armoryEyebrow">${types[w.type]} / ${SLOT_CN[slot]}</div><h3>${esc(w.name)}</h3><div class="armoryHero"><img data-icon="${esc(w.id)}" alt="${esc(w.name)} 模型预览"></div><p>${esc(USE_DESC[w.id] || '现有装备')}</p><div class="armoryCompare">${w.id === current ? '当前装备' : `对比当前：${esc(equipped?.name || '未装备')}`}</div><dl class="armoryStats">${stats}</dl>${gun ? `<div class="armoryHandling">切枪 ${format(w.draw)} 秒 · 移动倍率 ${format(w.speed)}×</div>` : ''}<small class="armoryStatNote">${gun ? '伤害为基础值，实战受距离、护甲与命中部位影响。差值不代表整体强弱。' : '实际效果受距离与命中位置影响。'}</small><button class="m1Btn go armoryEquip" data-w="${esc(w.id)}" ${w.id === current ? 'disabled' : ''}>${w.id === current ? `已装备于${esc(this._bagName(bag.id))}` : `装备到${esc(this._bagName(bag.id))}`}</button><small class="armoryTarget">${SLOT_CN[slot]} · 不改变默认出战背包</small>`;
   }
 
   _bagCards({ ctx, clickable }) {

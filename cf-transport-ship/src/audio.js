@@ -103,8 +103,83 @@ const GUNS = {
   },
 };
 
+// 新枪独立音色参数：紧凑枪身短尾音，重狙更低沉，沿用程序合成。
+GUNS.scar = {
+  ...GUNS.m4a1,
+  gain: 1.12,
+  drive: 2.5,
+  body: {
+    f0: 4800,
+    f1: 850,
+    dur: 0.15,
+    g: 0.88
+  },
+  mid: {
+    f: 1350,
+    q: 1.2,
+    dur: 0.08,
+    g: 0.5
+  }
+};
+GUNS.qbz95 = {
+  ...GUNS.m4a1,
+  gain: 1.08,
+  drive: 2.15,
+  body: {
+    f0: 5900,
+    f1: 1350,
+    dur: 0.095,
+    g: 0.82
+  },
+  tail: {
+    f: 1550,
+    dur: 0.3,
+    g: 0.20
+  }
+};
+GUNS.p90 = {
+  ...GUNS.mp5,
+  gain: 1.3,
+  drive: 1.8,
+  body: {
+    f0: 4500,
+    f1: 1250,
+    dur: 0.06,
+    g: 0.74
+  },
+  mid: {
+    f: 1650,
+    q: 1.4,
+    dur: 0.035,
+    g: 0.45
+  }
+};
+GUNS.barrett = {
+  ...GUNS.awm,
+  gain: 0.88,
+  drive: 3.3,
+  body: {
+    f0: 3200,
+    f1: 300,
+    dur: 0.38,
+    g: 1.0
+  },
+  punch: {
+    f0: 110,
+    f1: 28,
+    sw: 0.16,
+    dur: 0.45,
+    g: 1.0
+  },
+  tail: {
+    f: 580,
+    dur: 1.6,
+    g: 0.4
+  }
+};
+
 // 换弹/切枪的"重量感"：数值越小音高越低越沉
-const WEIGHT = { ak47: 0.85, m4a1: 1, awm: 0.8, mp5: 1.12, deagle: 1.05, usp: 1.1, glock18: 1.18, knife: 1.2, grenade: 1.1 };
+const WEIGHT = { scar: 0.92, qbz95: 1.08, p90: 1.2, barrett: 0.68, ak47: 0.85, m4a1: 1, awm: 0.8, mp5: 1.12, deagle: 1.05, usp: 1.1, glock18: 1.18, knife: 1.2, grenade: 1.1 };
 
 // ---------------------------------------------------------------------------
 // 预生成缓存（按采样率）：白/粉/褐噪声 + 混响 IR
@@ -808,6 +883,7 @@ export class AudioSystem {
           this._metal(v, t + 0.06, 3000, 0.08, [[1, 1, 0.06], [1.6, 0.5, 0.04]]);
           this._tn(v, t + 0.06, { f: 220, f1: 140, a: 0.002, dur: 0.04, g: 0.15 });
           break;
+        case 'barrett':
         case 'awm':
           this._tn(v, t + 0.07, { f: 150, f1: 90, a: 0.002, dur: 0.08, g: 0.35 });
           this._click(v, t + 0.07, 1700, 0.45, 1.3, 0.025);

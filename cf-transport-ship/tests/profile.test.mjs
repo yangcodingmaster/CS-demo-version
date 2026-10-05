@@ -248,7 +248,7 @@ test('9. getLoadout 四个值都在 WEAPONS 里且槽位类别正确', () => {
     }
   }
   assert.deepEqual(p.getLoadout(), p.getLoadout(p.data.selectedBackpackId));
-  assert.deepEqual(weaponsForSlot('primary'), ['ak47', 'm4a1', 'awm', 'mp5']);
+  assert.deepEqual(weaponsForSlot('primary'), ['ak47', 'm4a1', 'awm', 'mp5', 'scar', 'qbz95', 'p90', 'barrett']);
   assert.deepEqual(weaponsForSlot('secondary'), ['deagle', 'usp', 'glock18']);
   assert.deepEqual(weaponsForSlot('melee'), ['knife']);
   assert.deepEqual(weaponsForSlot('throwable'), ['he']);

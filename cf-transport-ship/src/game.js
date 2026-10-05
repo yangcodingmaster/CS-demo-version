@@ -22,6 +22,7 @@ import { bombMapId } from './map-catalog.js';
 import { BombRules } from './bomb-rules.js';
 import { BombVisual } from './bomb-visual.js';
 import { BombTactics, shouldCommitObjective } from './bomb-tactics.js';
+import { Lobby } from './lobby.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const MULTI = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'MULTI KILL', 'ULTRA KILL', 'RAMPAGE', 'UNSTOPPABLE', 'GODLIKE'];
@@ -39,6 +40,7 @@ export class Game {
     this.bombMapId = bombMapId(this.qs.get('bombMap'));
     this.startBagId = null;      // 初始背包选择屏的一次性覆盖，消费后回落到档案默认背包
     this.mode = this.selectedMode = 'team';
+    try { if (localStorage.getItem('cf_lobby_mode') === 'bomb') this.selectedMode = 'bomb'; } catch (e) { /* 存储不可用时使用默认模式 */ }
     this.bomb = null;
   }
   async init() {
@@ -50,6 +52,7 @@ export class Game {
     this.settingsReturn = 'home';
     if (this.qs.get('q')) this.opts.quality = this.qs.get('q');
     this.hud.show('loading');
+    this.hud.el.loadingTitle.textContent = '作战大厅';
     this.hud.loading(0.05, '初始化渲染器');
     await nextFrame();
     this.renderer = new Renderer(document.getElementById('c'), this.opts.quality);
@@ -57,7 +60,7 @@ export class Game {
     this.hud.loading(0.12, '生成集装箱 / 甲板 / 船体纹理');
     await nextFrame(); await nextFrame();
     this.T = buildTextures(this.opts.quality);
-    this.hud.loading(0.55, '搭建运输船');
+    this.hud.loading(0.55, '准备对局场景');
     await nextFrame();
     this.loadMap('team');
     this.hud.loading(0.68, '天空与海洋');
@@ -76,7 +79,8 @@ export class Game {
     await nextFrame();
     const icons = this.makeIcons();
     this.hud.setIcons(icons);
-    this.screens.setIcons(icons);
+    this.screens.setIcons(this.makeIcons({ colored: true }));
+    this.lobby = new Lobby(this.renderer, this.T);
     this.lampLights();
     this.renderer.camera.position.set(-20, 12, 30); this.renderer.camera.lookAt(0, 2, 0);
     try { this.renderer.renderer.compile(this.renderer.scene, this.renderer.camera); } catch (e) { /* 忽略 */ }
@@ -133,12 +137,19 @@ export class Game {
     this.hud.buildRadar(this.world, this.map);
     if (this.env) this.lampLights();
   }
-  makeIcons() {
+  makeIcons({ colored = false } = {}) {
     const r = this.renderer.renderer;
-    const W = 256, H = 96;
+    const W = colored ? 512 : 256, H = colored ? 192 : 96;
     const rt = new THREE.WebGLRenderTarget(W, H);
+    if (colored) rt.texture.colorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
-    scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    if (colored) {
+      scene.environment = this.env.envRT?.texture || null;
+      scene.environmentIntensity = 1.4;
+      scene.add(new THREE.HemisphereLight(0xe6f0ff, 0x76654d, 2.4));
+      const key = new THREE.DirectionalLight(0xfff4de, 4.0);
+      key.position.set(2, 3, -1); scene.add(key);
+    } else scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
     const out = {};
     const prevColor = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
@@ -152,14 +163,15 @@ export class Game {
       const hw = (box.max.z - box.min.z) / 2 * 1.08, hh = (box.max.y - box.min.y) / 2 * 1.08;
       const ext = Math.max(hw, hh * W / H);
       cam.left = -ext; cam.right = ext; cam.top = ext * H / W; cam.bottom = -ext * H / W;
-      cam.position.set(2, cy, cz); cam.lookAt(0, cy, cz); cam.updateProjectionMatrix();
+      cam.position.set(2, cy + (colored ? 0.24 : 0), cz + (colored ? 0.25 : 0)); cam.lookAt(0, cy, cz); cam.updateProjectionMatrix();
       r.setRenderTarget(rt); r.clear(); r.render(scene, cam);
       r.readRenderTargetPixels(rt, 0, 0, W, H, buf);
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const ctx = c.getContext('2d'); const img = ctx.createImageData(W, H);
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const s = ((H - 1 - y) * W + x) * 4, d = (y * W + x) * 4;
-        img.data[d] = img.data[d + 1] = img.data[d + 2] = 245; img.data[d + 3] = buf[s + 3] > 10 ? 235 : 0;
+        if (colored) for (let k = 0; k < 4; k++) img.data[d + k] = buf[s + k];
+        else { img.data[d] = img.data[d + 1] = img.data[d + 2] = 245; img.data[d + 3] = buf[s + 3] > 10 ? 235 : 0; }
       }
       ctx.putImageData(img, 0, 0);
       out[id] = c.toDataURL();
@@ -167,6 +179,7 @@ export class Game {
     }
     r.setRenderTarget(null); r.setClearColor(prevColor, prevAlpha);
     rt.dispose();
+    scene.overrideMaterial?.dispose();
     return out;
   }
 
@@ -189,6 +202,7 @@ export class Game {
   startSelectedMatch() { if (this.selectedMode === 'bomb') this.startBombMatch(); else this.startTeamMatch(); }
   restartMatch() { if (this.mode === 'bomb') this.startBombMatch(); else this.startTeamMatch(); }
   startMatch() {
+    document.body.classList.remove('in-lobby');
     const o = this.opts;
     audio.init(); audio.setVolumes({ master: o.vol }); audio.startAmbient(); audio.playUI('start');
     this.clearMatchObjects();
@@ -215,8 +229,9 @@ export class Game {
     this.actors.push(this.player);
     const N = this.bomb ? this.bomb.config.teamSize : o.size;
     const prim = (team, i) => {
-      if (i === 1 && N >= 4) return 'awm';
-      if (i === 3 && N >= 6) return 'mp5';
+      if (i === 1 && N >= 4) return team === 'BL' ? 'awm' : 'barrett';
+      if (i === 3 && N >= 6) return team === 'BL' ? 'p90' : 'mp5';
+      if (i === 2) return team === 'BL' ? 'qbz95' : 'scar';
       if (i === 5) return team === 'BL' ? 'm4a1' : 'ak47';
       return team === 'BL' ? 'ak47' : 'm4a1';
     };
@@ -356,30 +371,61 @@ export class Game {
   // ================= 界面流程 =================
   // 对局界面之外（主页、个人界面、设置、初始背包）统一隐藏对局 HUD
   showHome() {
+    document.body.classList.add('in-lobby');
     this.settingsReturn = 'home';
     this.hud.show(null, { hideHud: true });
     this.screens.show('home');
   }
   showPersonal() {
+    this.screens.manageReturn = 'personal';
     this.settingsReturn = 'personal';
     this.hud.show(null, { hideHud: true });
     this.screens.show('personal');
   }
   showTeamSetup() {
-    this.selectedMode = 'team';
+    this.selectLobbyMode('team');
     this.settingsReturn = 'home';
     this.screens.show(null);
     this.hud.show('menu', { hideHud: true });
     this.setMenuBackLabel('返回主页');
   }
   showBombSetup() {
-    this.selectedMode = 'bomb';
+    this.selectLobbyMode('bomb');
     this.settingsReturn = 'home';
     this.screens.show(null);
     this.hud.show('menu', { hideHud: true });
     this.setMenuBackLabel('返回主页');
   }
   showSelectedSetup() { if (this.selectedMode === 'bomb') this.showBombSetup(); else this.showTeamSetup(); }
+  selectLobbyMode(mode) {
+    this.selectedMode = mode === 'bomb' ? 'bomb' : 'team';
+    let saved = true;
+    try { localStorage.setItem('cf_lobby_mode', this.selectedMode); } catch (e) { saved = false; }
+    this.screens?.refresh();
+    return { ok: true, saved };
+  }
+  openLobbySetup() { this.showSelectedSetup(); }
+  selectLobbyBackpack(bagId) {
+    if (this.playing) return { ok: false, saved: false };
+    const result = this.profile.selectBackpack(bagId);
+    this.screens.refresh();
+    return result;
+  }
+  openLobbyBackpack() {
+    this.screens.manageReturn = 'home';
+    this.hud.show(null, { hideHud: true });
+    this.screens.openBackpack({ context: 'manage' });
+  }
+  openLobbyArmory() {
+    this.screens.manageReturn = 'home';
+    this.hud.show(null, { hideHud: true });
+    this.screens.bagCtx = 'manage';
+    this.screens.openArmory({ bagId: this.profile.selectedBackpack.id, slot: 'primary' });
+  }
+  syncLobby() {
+    const bag = this.profile.selectedBackpack;
+    this.lobby.sync({ team: this.opts.team, weaponId: bag.primary, mode: this.selectedMode, environment: this.env.envRT?.texture });
+  }
   showSettings() {
     // 设置屏复用运输船设置，返回目标取决于从哪一屏进来
     this.settingsReturn = this.screens.visible === 'home' ? 'home' : 'personal';
@@ -943,7 +989,7 @@ export class Game {
     this.vm.reload(d.reload, empty);
     this.timers.push({ t: t + d.reload * 0.2, fn: () => audio.playReload(id, 'magout') });
     this.timers.push({ t: t + d.reload * 0.6, fn: () => audio.playReload(id, 'magin') });
-    if (empty) this.timers.push({ t: t + d.reload * 0.82, fn: () => audio.playReload(id, id === 'awm' ? 'bolt' : 'boltback') });
+    if (empty) this.timers.push({ t: t + d.reload * 0.82, fn: () => audio.playReload(id, d.boltAction ? 'bolt' : 'boltback') });
     if (empty) this.timers.push({ t: t + d.reload * 0.88, fn: () => audio.playReload(id, 'boltforward') });
   }
   onReloadDone() { }
@@ -957,16 +1003,12 @@ export class Game {
     let dt = (now - this.last) / 1000; this.last = now;
     if (dt > 0.1) dt = 0.1;
     if (dt <= 0) return;
-    const R = this.renderer, cam = R.camera;
     this.realTime = (this.realTime || 0) + dt;
     const active = this.playing && !this.paused;
     if (active) this.simulate(dt);
-    else if (!this.playing) {
-      // 菜单：环绕运输船
-      const t = this.realTime * 0.045;
-      cam.position.set(Math.cos(t) * 46 - 6, 13 + Math.sin(t * 2.1) * 3, Math.sin(t) * 34);
-      cam.lookAt(-4, 1.5, 0);
-      cam.fov = 60; cam.updateProjectionMatrix();
+    else if (!this.playing && this.lobby) {
+      this.syncLobby();
+      this.lobby.update(dt, this.realTime);
     }
     this.renderFrame(dt);
   }
@@ -1047,6 +1089,10 @@ export class Game {
     }
   }
   renderFrame(dt) {
+    if (!this.playing && this.lobby) {
+      this.lobby.render();
+      return;
+    }
     const R = this.renderer, cam = R.camera;
     // 第一人称武器
     if (this.player && this.playing) {

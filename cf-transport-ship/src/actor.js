@@ -149,7 +149,7 @@ export class Actor {
         this.weapon.reloadUntil = 0;
         this.lastSlot = this.slot; this.slot = inp.sw;
         this.readyAt = now + tgt.def.draw;
-        this.scoped = 0; this.scopeReady = false;
+        this.scoped = 0; this.scopeReady = false; this.reScope = 0;
         this.soldier.setWeapon(tgt.id);
         g.onSwitch(this);
       }
@@ -229,8 +229,8 @@ export class Actor {
     if (d.spread) w.spreadAcc = Math.min(d.spread.max, w.spreadAcc + d.spread.perShot);
     this.protectT = 0;
     if (d.type === 'sniper') {
-      w.boltUntil = now + d.bolt;
-      if (this.scoped) { this.reScope = this.scoped; this.scoped = 0; this.scopeReady = false; }
+      w.boltUntil = now + (d.boltAction ? d.bolt : d.shotRecovery || 0);
+      if (d.boltAction && this.scoped) { this.reScope = this.scoped; this.scoped = 0; this.scopeReady = false; }
     }
     if (w.mag === 0 && w.canReload() && !this.isPlayer) this.startReload();
   }

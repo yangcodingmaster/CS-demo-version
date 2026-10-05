@@ -8,7 +8,7 @@ const TAG = process.argv[2] || 'polish';
 const BASE = process.env.M1_URL || 'http://127.0.0.1:8000/';
 const CHROME = process.env.M1_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const DIR = 'tools/shots/weapon-poses';
-const IDS = ['ak47', 'm4a1', 'awm', 'mp5', 'deagle', 'usp', 'glock18', 'knife', 'he'];
+const IDS = process.env.POSE_IDS ? process.env.POSE_IDS.split(',') : ['scar', 'qbz95', 'p90', 'barrett', 'ak47', 'm4a1', 'awm', 'mp5', 'deagle', 'usp', 'glock18', 'knife', 'he'];
 const results = [];
 const errors = [];
 const report = {};
@@ -95,10 +95,12 @@ try {
     }, id);
     report[id] = { initial };
     check(id, '持枪与手位有限，握持点在画面内', initial.rest.finite && initial.bounds.gripInView, initial);
+    check(id, '静止枪身完整落在画面内', initial.bounds.clippedFraction === 0, initial.bounds);
     await page.screenshot({ path: `${DIR}/${TAG}-${id}-idle.png` });
 
     await page.evaluate(() => { window.__game.vm.inspect(); window.__poseAdvance(0.95); });
     report[id].inspectBounds = await page.evaluate(() => window.__poseBounds());
+    check(id, '检视枪身完整落在画面内', report[id].inspectBounds.clippedFraction === 0, report[id].inspectBounds);
     await page.screenshot({ path: `${DIR}/${TAG}-${id}-inspect.png` });
     const inspected = await page.evaluate(() => { window.__poseAdvance(1.7); return { pose: window.__poseIdle(), rest: window.__poseRest() }; });
     check(id, '检视结束回到持枪位置与角度', inspected.rest.animation === null && inspected.rest.drift.length === 0 && inspected.pose.rotation.every((n, i) => Math.abs(n - initial.idle.rotation[i]) < 1e-7) && [0, 2].every((i) => Math.abs(inspected.pose.position[i] - initial.idle.position[i]) < 1e-7), inspected);

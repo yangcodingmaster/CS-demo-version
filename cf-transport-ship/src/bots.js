@@ -60,7 +60,7 @@ export class Bot extends Actor {
       return;
     }
     const r = Math.random();
-    this.role = this.primary === 'awm' ? 'hold' : r < 0.25 ? 'flank' : 'rush';
+    this.role = this.inv[0].def.type === 'sniper' ? 'hold' : r < 0.25 ? 'flank' : 'rush';
     this.lane = LANES[(Math.random() * 3) | 0];
     this.stage = 0;
     this.pickGoal();
